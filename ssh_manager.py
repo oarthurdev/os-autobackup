@@ -75,6 +75,24 @@ class SSHManager:
 
         return stdout.read().decode('utf-8'), stderr.read().decode('utf-8'), exit_status
 
+    def get_directory_size(self, paths: list) -> int:
+        """Estima o tamanho total dos diretórios a serem backupeados."""
+        try:
+            paths_str = ' '.join([f'"{p}"' for p in paths])
+            command = f'du -sb {paths_str} | awk \'{{sum+=$1}} END {{print sum}}\''
+
+            stdin, stdout, stderr = self.client.exec_command(command, timeout=30)
+            output = stdout.read().decode().strip()
+            error = stderr.read().decode().strip()
+
+            if error and 'cannot access' not in error.lower():
+                raise Exception(f"Error estimating size: {error}")
+
+            return int(output) if output.isdigit() else 0
+        except Exception as e:
+            # Se falhar, retornar 0 (sem estimativa)
+            return 0
+
     def create_remote_archive(self, paths: list, archive_name: str, progress_callback=None, use_fast_compression=None) -> str:
         validated_paths = []
         total_size = 0
@@ -109,6 +127,10 @@ class SSHManager:
                 if self.logger:
                     self.logger.warning(f"Error estimating size for path '{path}': {e}")
                 # Continue even if size estimation fails for one path
+
+        # Use the new method to estimate total size for the progress callback
+        total_size = self.get_directory_size(paths)
+
 
         paths_str = ' '.join(validated_paths)
         remote_temp_dir = '/tmp' # Default temporary directory
@@ -234,18 +256,18 @@ class SSHManager:
         finally:
             sftp.close()
 
-    def download_and_encrypt_streaming(self, remote_path: str, encrypted_local_path: str, 
+    def download_and_encrypt_streaming(self, remote_path: str, encrypted_local_path: str,
                                       encryptor, progress_callback=None) -> int:
         """
         Download a file from the remote server and encrypt it in streaming mode.
         This avoids storing the unencrypted file locally.
-        
+
         Args:
             remote_path: Path to the file on the remote server
             encrypted_local_path: Path where the encrypted file will be saved locally
             encryptor: Encryptor instance to use for encryption
             progress_callback: Optional callback function for progress updates
-            
+
         Returns:
             int: Size of the encrypted file in bytes
         """
@@ -255,54 +277,54 @@ class SSHManager:
         sftp = self.client.open_sftp()
         chunk_size = 1024 * 1024  # 1MB chunks
         total_downloaded = 0
-        
+
         try:
             # Get file size for progress tracking
             file_stat = sftp.stat(remote_path)
             file_size = file_stat.st_size
-            
+
             if file_size is None or file_size <= 0:
                 raise Exception(f"Invalid file size for {remote_path}")
-            
+
             if progress_callback:
                 progress_callback(f"Iniciando download de {self._format_bytes(file_size)}")
-            
+
             # Open remote file for reading
             with sftp.open(remote_path, 'rb') as remote_file:
                 # Start encryption streaming
                 encryptor.start_encryption_stream(encrypted_local_path)
-                
+
                 try:
                     # Read and encrypt in chunks
                     while True:
                         chunk = remote_file.read(chunk_size)
                         if not chunk:
                             break
-                        
+
                         encryptor.encrypt_chunk(chunk)
                         total_downloaded += len(chunk)
-                        
+
                         # Update progress every 10MB
                         if progress_callback and file_size > 0 and total_downloaded % (10 * 1024 * 1024) == 0:
                             percentage = (total_downloaded / file_size) * 100
                             progress_callback(f"Baixado e criptografado: {self._format_bytes(total_downloaded)} ({percentage:.1f}%)")
-                    
+
                     # Finalize encryption
                     encryptor.finalize_encryption_stream()
-                    
+
                     if progress_callback:
                         progress_callback(f"Download e criptografia concluídos: {self._format_bytes(total_downloaded)}")
-                    
+
                 except Exception as e:
                     # Clean up partial file on error
                     if os.path.exists(encrypted_local_path):
                         os.remove(encrypted_local_path)
                     raise Exception(f"Error during streaming download/encryption: {str(e)}")
-            
+
             # Get the size of the encrypted file
             encrypted_size = os.path.getsize(encrypted_local_path)
             return encrypted_size
-            
+
         except FileNotFoundError:
             raise FileNotFoundError(f"Remote file not found: {remote_path}")
         except Exception as e:

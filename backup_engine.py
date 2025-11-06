@@ -15,6 +15,20 @@ class BackupEngine:
         self.db = Database()
         self.logger = None
         self.ssh_host_manager = SSHHostManager()
+        
+        # Peso relativo de cada etapa (baseado em experiência com arquivos grandes)
+        self.step_weights = {
+            1: 1,   # Iniciando backup
+            2: 2,   # Conectando ao servidor
+            3: 40,  # Criando arquivo (compressão) - MAIS DEMORADO
+            4: 30,  # Download e criptografia streaming
+            5: 5,   # Limpeza remota
+            6: 20,  # Upload para Google Drive
+            7: 2    # Finalização
+        }
+        
+        self.total_weight = sum(self.step_weights.values())
+        
         self.progress = {
             'status': 'idle',
             'current_step': '',
@@ -22,24 +36,61 @@ class BackupEngine:
             'total_steps': 7,
             'current_step_number': 0,
             'start_time': None,
-            'estimated_time_remaining': None
+            'estimated_time_remaining': None,
+            'estimated_file_size': None,
+            'step_start_times': {}
         }
         
         os.makedirs(Config.TEMP_DIR, exist_ok=True)
     
-    def update_progress(self, step_number: int, step_name: str):
+    def update_progress(self, step_number: int, step_name: str, estimated_size_mb: float = None):
         self.progress['current_step_number'] = step_number
         self.progress['current_step'] = step_name
-        self.progress['percentage'] = int((step_number / self.progress['total_steps']) * 100)
+        
+        # Registrar tempo de início da etapa
+        self.progress['step_start_times'][step_number] = time.time()
+        
+        # Calcular porcentagem baseada em pesos
+        completed_weight = sum(self.step_weights[i] for i in range(1, step_number))
+        self.progress['percentage'] = int((completed_weight / self.total_weight) * 100)
         self.progress['status'] = 'in_progress'
         
-        # Calculate estimated time remaining
-        if self.progress['start_time'] and step_number > 0:
+        # Armazenar tamanho estimado do arquivo
+        if estimated_size_mb:
+            self.progress['estimated_file_size'] = estimated_size_mb
+        
+        # Calculate estimated time remaining (método melhorado)
+        if self.progress['start_time'] and step_number > 1:
             elapsed_time = time.time() - self.progress['start_time']
-            steps_remaining = self.progress['total_steps'] - step_number
-            avg_time_per_step = elapsed_time / step_number
-            estimated_remaining = avg_time_per_step * steps_remaining
-            self.progress['estimated_time_remaining'] = int(estimated_remaining)
+            
+            # Peso completado até agora
+            completed_weight = sum(self.step_weights[i] for i in range(1, step_number))
+            
+            # Peso restante
+            remaining_weight = self.total_weight - completed_weight
+            
+            # Tempo médio por unidade de peso
+            time_per_weight_unit = elapsed_time / completed_weight if completed_weight > 0 else 0
+            
+            # Estimativa base
+            base_estimate = time_per_weight_unit * remaining_weight
+            
+            # Ajuste baseado no tamanho do arquivo (se conhecido)
+            if self.progress.get('estimated_file_size'):
+                size_mb = self.progress['estimated_file_size']
+                
+                # Para arquivos grandes, aumentar estimativa das etapas pesadas
+                if size_mb > 1000:  # > 1GB
+                    # Fator de ajuste baseado no tamanho
+                    size_factor = min(size_mb / 1000, 10)  # Máximo 10x
+                    
+                    # Se ainda não passou da etapa 3 (compressão) ou 4 (download/encrypt)
+                    if step_number < 4:
+                        base_estimate *= size_factor
+                    elif step_number < 6:
+                        base_estimate *= (size_factor * 0.7)
+            
+            self.progress['estimated_time_remaining'] = int(base_estimate)
     
     def reset_progress(self):
         self.progress = {
@@ -49,7 +100,9 @@ class BackupEngine:
             'total_steps': 7,
             'current_step_number': 0,
             'start_time': None,
-            'estimated_time_remaining': None
+            'estimated_time_remaining': None,
+            'estimated_file_size': None,
+            'step_start_times': {}
         }
     
     def get_progress(self):
@@ -98,12 +151,23 @@ class BackupEngine:
             self.db.add_log(backup_id, 'INFO', 'SSH connection successful')
             
             archive_name = f"backup_{datetime.now().strftime('%Y%m%d_%H%M%S')}.tar.gz"
-            self.update_progress(3, 'Criando arquivo de backup no servidor...')
+            
+            # Estimar tamanho dos diretórios antes de criar o arquivo
+            estimated_size_mb = None
+            try:
+                total_size = ssh_manager.get_directory_size(paths)
+                estimated_size_mb = total_size / (1024 * 1024)  # Converter para MB
+                self.logger.info(f"Estimated backup size: {estimated_size_mb:.2f} MB")
+                self.db.add_log(backup_id, 'INFO', f"Tamanho estimado: {estimated_size_mb:.2f} MB")
+            except Exception as e:
+                self.logger.warning(f"Could not estimate size: {e}")
+            
+            self.update_progress(3, 'Criando arquivo de backup no servidor...', estimated_size_mb)
             self.logger.info(f"Creating remote archive: {archive_name}")
             self.db.add_log(backup_id, 'INFO', f"Creating archive: {archive_name}")
             
             def archive_progress_callback(message):
-                self.update_progress(3, f'Criando arquivo de backup: {message}')
+                self.update_progress(3, f'Criando arquivo de backup: {message}', estimated_size_mb)
                 if self.logger:
                     self.logger.info(message)
                 self.db.add_log(backup_id, 'INFO', message)
