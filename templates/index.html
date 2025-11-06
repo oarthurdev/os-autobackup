@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
@@ -7,47 +8,139 @@
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
     <link href="{{ url_for('static', filename='css/style.css') }}" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body>
-    <nav class="navbar navbar-dark bg-dark">
+    <nav class="navbar navbar-dark bg-gradient">
         <div class="container-fluid">
             <span class="navbar-brand mb-0 h1">
-                <i class="fas fa-server"></i> Ubuntu AutoBackup
+                <i class="fas fa-server pulse-icon"></i> Ubuntu AutoBackup
+                <span class="badge bg-success ms-2" id="liveIndicator">
+                    <i class="fas fa-circle blink"></i> LIVE
+                </span>
             </span>
-            <button class="btn btn-success" id="forceBackupBtn" onclick="showBackupModal()">
-                <i class="fas fa-play"></i> Forçar Backup Agora
-            </button>
+            <div class="d-flex align-items-center gap-3">
+                <button class="btn btn-outline-light" id="themeToggle" onclick="toggleTheme()">
+                    <i class="fas fa-moon" id="themeIcon"></i>
+                </button>
+                <button class="btn btn-gradient-success" id="forceBackupBtn" onclick="showBackupModal()">
+                    <i class="fas fa-play"></i> Forçar Backup Agora
+                </button>
+            </div>
         </div>
     </nav>
 
-    <div class="container mt-4">
-        <div class="row mb-4">
-            <div class="col-md-12">
-                <div class="card">
-                    <div class="card-header bg-primary text-white">
-                        <h5><i class="fas fa-info-circle"></i> Status Atual</h5>
+    <div class="container-fluid mt-4 px-4">
+        <!-- Statistics Cards -->
+        <div class="row mb-4 g-3">
+            <div class="col-md-3">
+                <div class="stat-card card-primary">
+                    <div class="stat-icon">
+                        <i class="fas fa-database"></i>
+                    </div>
+                    <div class="stat-content">
+                        <div class="stat-label">Total de Backups</div>
+                        <div class="stat-value" id="totalBackups">0</div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="stat-card card-success">
+                    <div class="stat-icon">
+                        <i class="fas fa-check-circle"></i>
+                    </div>
+                    <div class="stat-content">
+                        <div class="stat-label">Backups Bem-Sucedidos</div>
+                        <div class="stat-value" id="successBackups">0</div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="stat-card card-danger">
+                    <div class="stat-icon">
+                        <i class="fas fa-exclamation-circle"></i>
+                    </div>
+                    <div class="stat-content">
+                        <div class="stat-label">Backups Falhados</div>
+                        <div class="stat-value" id="failedBackups">0</div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="stat-card card-info">
+                    <div class="stat-icon">
+                        <i class="fas fa-hdd"></i>
+                    </div>
+                    <div class="stat-content">
+                        <div class="stat-label">Espaço Total</div>
+                        <div class="stat-value" id="totalSize">0 GB</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Progress Section (when backup is running) -->
+        <div class="row mb-4" id="progressSection" style="display: none;">
+            <div class="col-12">
+                <div class="card progress-card">
+                    <div class="card-header bg-gradient text-white">
+                        <h5 class="mb-0">
+                            <i class="fas fa-spinner fa-spin"></i> Backup em Andamento
+                        </h5>
                     </div>
                     <div class="card-body">
-                        <div id="currentStatus">
-                            <p class="text-muted">Carregando status...</p>
-                        </div>
+                        <div id="progressContent"></div>
                     </div>
                 </div>
             </div>
         </div>
 
         <div class="row mb-4">
-            <div class="col-md-12">
-                <div class="card">
-                    <div class="card-header bg-success text-white d-flex justify-content-between align-items-center">
+            <!-- Status and Charts -->
+            <div class="col-lg-8">
+                <div class="card modern-card">
+                    <div class="card-header bg-gradient-primary text-white">
+                        <h5 class="mb-0"><i class="fas fa-chart-line"></i> Estatísticas de Backup</h5>
+                    </div>
+                    <div class="card-body">
+                        <canvas id="backupChart" height="80"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Current Status -->
+            <div class="col-lg-4">
+                <div class="card modern-card">
+                    <div class="card-header bg-gradient-primary text-white">
+                        <h5 class="mb-0"><i class="fas fa-info-circle"></i> Status Atual</h5>
+                    </div>
+                    <div class="card-body">
+                        <div id="currentStatus">
+                            <div class="status-loading">
+                                <div class="spinner-border text-primary" role="status">
+                                    <span class="visually-hidden">Carregando...</span>
+                                </div>
+                                <p class="mt-2 text-muted">Carregando status...</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- SSH Servers Section -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="card modern-card">
+                    <div class="card-header bg-gradient-success text-white d-flex justify-content-between align-items-center">
                         <h5 class="mb-0"><i class="fas fa-network-wired"></i> Servidores SSH</h5>
                         <button class="btn btn-light btn-sm" onclick="showAddHostModal()">
                             <i class="fas fa-plus"></i> Adicionar Servidor
                         </button>
                     </div>
-                    <div class="card-body">
+                    <div class="card-body p-0">
                         <div class="table-responsive">
-                            <table class="table table-striped table-hover">
+                            <table class="table table-hover mb-0 modern-table">
                                 <thead>
                                     <tr>
                                         <th>Nome</th>
@@ -55,14 +148,15 @@
                                         <th>Porta</th>
                                         <th>Usuário</th>
                                         <th>Autenticação</th>
-                                        <th>Caminhos de Backup</th>
+                                        <th>Caminhos</th>
                                         <th>Status</th>
                                         <th>Ações</th>
                                     </tr>
                                 </thead>
                                 <tbody id="sshHostsTable">
                                     <tr>
-                                        <td colspan="8" class="text-center text-muted">
+                                        <td colspan="8" class="text-center text-muted py-4">
+                                            <i class="fas fa-server fa-3x mb-3 d-block"></i>
                                             Carregando servidores...
                                         </td>
                                     </tr>
@@ -74,15 +168,21 @@
             </div>
         </div>
 
+        <!-- Backup History -->
         <div class="row">
-            <div class="col-md-12">
-                <div class="card">
-                    <div class="card-header bg-info text-white">
-                        <h5><i class="fas fa-history"></i> Histórico de Backups</h5>
+            <div class="col-12">
+                <div class="card modern-card">
+                    <div class="card-header bg-gradient-info text-white d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0"><i class="fas fa-history"></i> Histórico de Backups</h5>
+                        <div class="btn-group">
+                            <button class="btn btn-sm btn-light" onclick="loadBackups()">
+                                <i class="fas fa-sync-alt"></i> Atualizar
+                            </button>
+                        </div>
                     </div>
-                    <div class="card-body">
+                    <div class="card-body p-0">
                         <div class="table-responsive">
-                            <table class="table table-striped table-hover">
+                            <table class="table table-hover mb-0 modern-table">
                                 <thead>
                                     <tr>
                                         <th>ID</th>
@@ -96,7 +196,8 @@
                                 </thead>
                                 <tbody id="backupsTable">
                                     <tr>
-                                        <td colspan="7" class="text-center text-muted">
+                                        <td colspan="7" class="text-center text-muted py-4">
+                                            <i class="fas fa-folder-open fa-3x mb-3 d-block"></i>
                                             Carregando histórico...
                                         </td>
                                     </tr>
@@ -109,16 +210,18 @@
         </div>
     </div>
 
+    <!-- Modals -->
     <div class="modal fade" id="logsModal" tabindex="-1">
-        <div class="modal-dialog modal-lg">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title">Logs do Backup</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        <div class="modal-dialog modal-lg modal-dialog-scrollable">
+            <div class="modal-content modern-modal">
+                <div class="modal-header bg-gradient">
+                    <h5 class="modal-title text-white">
+                        <i class="fas fa-file-alt"></i> Logs do Backup
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
                 </div>
                 <div class="modal-body">
-                    <div id="logsContent" style="max-height: 400px; overflow-y: auto; font-family: monospace; font-size: 0.9rem;">
-                    </div>
+                    <div id="logsContent" class="logs-container"></div>
                 </div>
             </div>
         </div>
@@ -126,61 +229,83 @@
 
     <div class="modal fade" id="hostModal" tabindex="-1">
         <div class="modal-dialog modal-lg">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title" id="hostModalTitle">Adicionar Servidor SSH</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            <div class="modal-content modern-modal">
+                <div class="modal-header bg-gradient">
+                    <h5 class="modal-title text-white" id="hostModalTitle">
+                        <i class="fas fa-server"></i> Adicionar Servidor SSH
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
                 </div>
                 <div class="modal-body">
                     <form id="hostForm">
                         <input type="hidden" id="hostId">
                         <div class="row">
                             <div class="col-md-6 mb-3">
-                                <label for="hostName" class="form-label">Nome do Servidor *</label>
-                                <input type="text" class="form-control" id="hostName" required>
+                                <label for="hostName" class="form-label">
+                                    <i class="fas fa-tag"></i> Nome do Servidor *
+                                </label>
+                                <input type="text" class="form-control modern-input" id="hostName" required>
                             </div>
                             <div class="col-md-6 mb-3">
-                                <label for="hostAddress" class="form-label">Endereço IP/Host *</label>
-                                <input type="text" class="form-control" id="hostAddress" required>
+                                <label for="hostAddress" class="form-label">
+                                    <i class="fas fa-globe"></i> Endereço IP/Host *
+                                </label>
+                                <input type="text" class="form-control modern-input" id="hostAddress" required>
                             </div>
                         </div>
                         <div class="row">
                             <div class="col-md-6 mb-3">
-                                <label for="hostPort" class="form-label">Porta SSH *</label>
-                                <input type="number" class="form-control" id="hostPort" value="22" required>
+                                <label for="hostPort" class="form-label">
+                                    <i class="fas fa-ethernet"></i> Porta SSH *
+                                </label>
+                                <input type="number" class="form-control modern-input" id="hostPort" value="22" required>
                             </div>
                             <div class="col-md-6 mb-3">
-                                <label for="hostUsername" class="form-label">Usuário *</label>
-                                <input type="text" class="form-control" id="hostUsername" required>
+                                <label for="hostUsername" class="form-label">
+                                    <i class="fas fa-user"></i> Usuário *
+                                </label>
+                                <input type="text" class="form-control modern-input" id="hostUsername" required>
                             </div>
                         </div>
                         <div class="mb-3">
-                            <label for="hostAuthType" class="form-label">Tipo de Autenticação *</label>
-                            <select class="form-select" id="hostAuthType" onchange="toggleAuthFields()">
+                            <label for="hostAuthType" class="form-label">
+                                <i class="fas fa-key"></i> Tipo de Autenticação *
+                            </label>
+                            <select class="form-select modern-input" id="hostAuthType" onchange="toggleAuthFields()">
                                 <option value="password">Senha</option>
                                 <option value="key">Chave SSH</option>
                             </select>
                         </div>
                         <div class="mb-3" id="passwordField">
-                            <label for="hostPassword" class="form-label">Senha</label>
-                            <input type="password" class="form-control" id="hostPassword">
+                            <label for="hostPassword" class="form-label">
+                                <i class="fas fa-lock"></i> Senha
+                            </label>
+                            <input type="password" class="form-control modern-input" id="hostPassword">
                             <small class="text-muted">Deixe em branco para manter a senha atual (ao editar)</small>
                         </div>
                         <div class="mb-3 d-none" id="keyPathField">
-                            <label for="hostKeyPath" class="form-label">Caminho da Chave SSH</label>
-                            <input type="text" class="form-control" id="hostKeyPath" placeholder="/path/to/private/key">
-                            <small class="text-muted">Caminho absoluto para a chave privada SSH no servidor Replit</small>
+                            <label for="hostKeyPath" class="form-label">
+                                <i class="fas fa-key"></i> Caminho da Chave SSH
+                            </label>
+                            <input type="text" class="form-control modern-input" id="hostKeyPath" placeholder="/path/to/private/key">
+                            <small class="text-muted">Caminho absoluto para a chave privada SSH</small>
                         </div>
                         <div class="mb-3">
-                            <label for="hostBackupPaths" class="form-label">Caminhos para Backup *</label>
-                            <input type="text" class="form-control" id="hostBackupPaths" value="/home" required>
+                            <label for="hostBackupPaths" class="form-label">
+                                <i class="fas fa-folder"></i> Caminhos para Backup *
+                            </label>
+                            <input type="text" class="form-control modern-input" id="hostBackupPaths" value="/home" required>
                             <small class="text-muted">Caminhos separados por vírgula (ex: /home,/etc,/var/www)</small>
                         </div>
                     </form>
                 </div>
                 <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
-                    <button type="button" class="btn btn-primary" onclick="saveHost()">Salvar</button>
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                        <i class="fas fa-times"></i> Cancelar
+                    </button>
+                    <button type="button" class="btn btn-gradient-primary" onclick="saveHost()">
+                        <i class="fas fa-save"></i> Salvar
+                    </button>
                 </div>
             </div>
         </div>
@@ -188,22 +313,30 @@
 
     <div class="modal fade" id="backupModal" tabindex="-1">
         <div class="modal-dialog">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title">Iniciar Backup</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            <div class="modal-content modern-modal">
+                <div class="modal-header bg-gradient">
+                    <h5 class="modal-title text-white">
+                        <i class="fas fa-play-circle"></i> Iniciar Backup
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
                 </div>
                 <div class="modal-body">
                     <div class="mb-3">
-                        <label for="backupHostSelect" class="form-label">Selecione o Servidor</label>
-                        <select class="form-select" id="backupHostSelect">
+                        <label for="backupHostSelect" class="form-label">
+                            <i class="fas fa-server"></i> Selecione o Servidor
+                        </label>
+                        <select class="form-select modern-input" id="backupHostSelect">
                             <option value="">Carregando servidores...</option>
                         </select>
                     </div>
                 </div>
                 <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
-                    <button type="button" class="btn btn-success" onclick="startBackupWithHost()">Iniciar Backup</button>
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                        <i class="fas fa-times"></i> Cancelar
+                    </button>
+                    <button type="button" class="btn btn-gradient-success" onclick="startBackupWithHost()">
+                        <i class="fas fa-play"></i> Iniciar Backup
+                    </button>
                 </div>
             </div>
         </div>

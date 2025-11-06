@@ -1,10 +1,18 @@
 let logsModal, hostModal, backupModal;
 let currentHostId = null;
+let backupChart = null;
+let allBackups = [];
 
 document.addEventListener('DOMContentLoaded', function() {
     logsModal = new bootstrap.Modal(document.getElementById('logsModal'));
     hostModal = new bootstrap.Modal(document.getElementById('hostModal'));
     backupModal = new bootstrap.Modal(document.getElementById('backupModal'));
+    
+    // Load theme preference
+    loadTheme();
+    
+    // Initialize chart
+    initializeChart();
     
     loadStatus();
     loadSSHHosts();
@@ -14,6 +22,143 @@ document.addEventListener('DOMContentLoaded', function() {
     setInterval(loadSSHHosts, 15000);
     setInterval(loadBackups, 10000);
 });
+
+function loadTheme() {
+    const theme = localStorage.getItem('theme') || 'light';
+    document.documentElement.setAttribute('data-theme', theme);
+    updateThemeIcon(theme);
+}
+
+function toggleTheme() {
+    const currentTheme = document.documentElement.getAttribute('data-theme');
+    const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+    document.documentElement.setAttribute('data-theme', newTheme);
+    localStorage.setItem('theme', newTheme);
+    updateThemeIcon(newTheme);
+    
+    // Update chart colors
+    if (backupChart) {
+        updateChartTheme(newTheme);
+    }
+}
+
+function updateThemeIcon(theme) {
+    const icon = document.getElementById('themeIcon');
+    if (theme === 'dark') {
+        icon.className = 'fas fa-sun';
+    } else {
+        icon.className = 'fas fa-moon';
+    }
+}
+
+function initializeChart() {
+    const ctx = document.getElementById('backupChart');
+    const theme = document.documentElement.getAttribute('data-theme');
+    const textColor = theme === 'dark' ? '#eaeaea' : '#212529';
+    const gridColor = theme === 'dark' ? '#2d3561' : '#dee2e6';
+    
+    backupChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: [],
+            datasets: [{
+                label: 'Tamanho do Backup (MB)',
+                data: [],
+                borderColor: 'rgb(102, 126, 234)',
+                backgroundColor: 'rgba(102, 126, 234, 0.1)',
+                tension: 0.4,
+                fill: true
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: true,
+            plugins: {
+                legend: {
+                    labels: {
+                        color: textColor
+                    }
+                }
+            },
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    ticks: {
+                        color: textColor
+                    },
+                    grid: {
+                        color: gridColor
+                    }
+                },
+                x: {
+                    ticks: {
+                        color: textColor
+                    },
+                    grid: {
+                        color: gridColor
+                    }
+                }
+            }
+        }
+    });
+}
+
+function updateChartTheme(theme) {
+    const textColor = theme === 'dark' ? '#eaeaea' : '#212529';
+    const gridColor = theme === 'dark' ? '#2d3561' : '#dee2e6';
+    
+    backupChart.options.plugins.legend.labels.color = textColor;
+    backupChart.options.scales.y.ticks.color = textColor;
+    backupChart.options.scales.y.grid.color = gridColor;
+    backupChart.options.scales.x.ticks.color = textColor;
+    backupChart.options.scales.x.grid.color = gridColor;
+    backupChart.update();
+}
+
+function updateChart(backups) {
+    const successBackups = backups.filter(b => b.status === 'SUCCESS' && b.file_size).slice(0, 10).reverse();
+    
+    const labels = successBackups.map(b => {
+        const date = new Date(b.timestamp);
+        return date.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
+    });
+    
+    const data = successBackups.map(b => (b.file_size / (1024 * 1024)).toFixed(2));
+    
+    backupChart.data.labels = labels;
+    backupChart.data.datasets[0].data = data;
+    backupChart.update();
+}
+
+function updateStatistics(backups) {
+    const total = backups.length;
+    const success = backups.filter(b => b.status === 'SUCCESS').length;
+    const failed = backups.filter(b => b.status === 'FAILED').length;
+    const totalSize = backups.reduce((sum, b) => sum + (b.file_size || 0), 0);
+    
+    animateValue('totalBackups', 0, total, 1000);
+    animateValue('successBackups', 0, success, 1000);
+    animateValue('failedBackups', 0, failed, 1000);
+    
+    const sizeGB = (totalSize / (1024 * 1024 * 1024)).toFixed(2);
+    document.getElementById('totalSize').textContent = sizeGB + ' GB';
+}
+
+function animateValue(id, start, end, duration) {
+    const element = document.getElementById(id);
+    const range = end - start;
+    const increment = range / (duration / 16);
+    let current = start;
+    
+    const timer = setInterval(() => {
+        current += increment;
+        if ((increment > 0 && current >= end) || (increment < 0 && current <= end)) {
+            current = end;
+            clearInterval(timer);
+        }
+        element.textContent = Math.round(current);
+    }, 16);
+}
 
 async function loadSSHHosts() {
     try {
@@ -306,49 +451,103 @@ async function loadStatus() {
         const data = await response.json();
         
         const statusDiv = document.getElementById('currentStatus');
+        const progressSection = document.getElementById('progressSection');
+        const progressContent = document.getElementById('progressContent');
         
         if (data.in_progress && data.progress) {
             const progress = data.progress;
-            statusDiv.innerHTML = `
-                <p><strong>Status:</strong> <span class="badge status-in-progress">
-                    <span class="spinner-border spinner-border-sm"></span> Backup em Andamento
-                </span></p>
-                <div class="mt-3">
-                    <div class="d-flex justify-content-between mb-2">
-                        <strong>Progresso:</strong>
-                        <span>${progress.percentage}%</span>
+            
+            // Show progress section
+            progressSection.style.display = 'block';
+            progressContent.innerHTML = `
+                <div class="d-flex justify-content-between mb-3">
+                    <h6 class="mb-0">
+                        <i class="fas fa-tasks"></i> Etapa ${progress.current_step_number} de ${progress.total_steps}
+                    </h6>
+                    <span class="badge bg-warning">${progress.percentage}%</span>
+                </div>
+                <div class="progress mb-3" style="height: 30px;">
+                    <div class="progress-bar progress-bar-striped progress-bar-animated" 
+                         role="progressbar" 
+                         style="width: ${progress.percentage}%; background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);"
+                         aria-valuenow="${progress.percentage}" 
+                         aria-valuemin="0" 
+                         aria-valuemax="100">
+                        ${progress.percentage}%
                     </div>
-                    <div class="progress" style="height: 25px;">
-                        <div class="progress-bar progress-bar-striped progress-bar-animated bg-primary" 
-                             role="progressbar" 
-                             style="width: ${progress.percentage}%"
-                             aria-valuenow="${progress.percentage}" 
-                             aria-valuemin="0" 
-                             aria-valuemax="100">
-                            ${progress.percentage}%
-                        </div>
-                    </div>
-                    <p class="mt-2 mb-0"><small class="text-muted">
-                        Etapa ${progress.current_step_number}/${progress.total_steps}: ${progress.current_step}
-                    </small></p>
+                </div>
+                <div class="alert alert-info mb-0">
+                    <i class="fas fa-info-circle"></i> <strong>${progress.current_step}</strong>
                 </div>
             `;
-        } else if (data.latest_backup) {
-            const latest = data.latest_backup;
-            const statusClass = latest.status === 'SUCCESS' ? 'status-success' : 
-                               latest.status === 'FAILED' ? 'status-failed' : 'status-in-progress';
-            const statusText = latest.status === 'SUCCESS' ? 'Sucesso' :
-                              latest.status === 'FAILED' ? 'Falhou' : 'Em Progresso';
             
             statusDiv.innerHTML = `
-                <p><strong>Último Backup:</strong> ${formatDate(latest.timestamp)}</p>
-                <p><strong>Status:</strong> <span class="badge ${statusClass}">${statusText}</span></p>
-                ${latest.file_name ? `<p><strong>Arquivo:</strong> ${latest.file_name}</p>` : ''}
-                ${latest.file_size ? `<p><strong>Tamanho:</strong> ${formatBytes(latest.file_size)}</p>` : ''}
-                ${latest.error_message ? `<p class="text-danger"><strong>Erro:</strong> ${latest.error_message}</p>` : ''}
+                <div class="text-center">
+                    <div class="spinner-border text-primary mb-3" role="status" style="width: 3rem; height: 3rem;">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                    <h6>Backup em Andamento</h6>
+                    <p class="text-muted mb-0">Acompanhe o progresso acima</p>
+                </div>
             `;
         } else {
-            statusDiv.innerHTML = '<p class="text-muted">Nenhum backup realizado ainda.</p>';
+            progressSection.style.display = 'none';
+            
+            if (data.latest_backup) {
+                const latest = data.latest_backup;
+                const statusClass = latest.status === 'SUCCESS' ? 'status-success' : 
+                                   latest.status === 'FAILED' ? 'status-failed' : 'status-in-progress';
+                const statusText = latest.status === 'SUCCESS' ? 'Sucesso' :
+                                  latest.status === 'FAILED' ? 'Falhou' : 'Em Progresso';
+                const statusIcon = latest.status === 'SUCCESS' ? 'fa-check-circle' :
+                                  latest.status === 'FAILED' ? 'fa-times-circle' : 'fa-spinner fa-spin';
+                
+                statusDiv.innerHTML = `
+                    <div class="mb-3 pb-3 border-bottom">
+                        <div class="d-flex align-items-center mb-2">
+                            <i class="fas ${statusIcon} me-2" style="font-size: 1.5rem;"></i>
+                            <h6 class="mb-0">Último Backup</h6>
+                        </div>
+                        <span class="badge ${statusClass}">${statusText}</span>
+                    </div>
+                    <div class="info-list">
+                        <div class="info-item">
+                            <i class="fas fa-calendar text-muted"></i>
+                            <span>${formatDate(latest.timestamp)}</span>
+                        </div>
+                        ${latest.file_name ? `
+                        <div class="info-item">
+                            <i class="fas fa-file text-muted"></i>
+                            <span>${latest.file_name}</span>
+                        </div>
+                        ` : ''}
+                        ${latest.file_size ? `
+                        <div class="info-item">
+                            <i class="fas fa-hdd text-muted"></i>
+                            <span>${formatBytes(latest.file_size)}</span>
+                        </div>
+                        ` : ''}
+                        ${latest.duration_seconds ? `
+                        <div class="info-item">
+                            <i class="fas fa-clock text-muted"></i>
+                            <span>${latest.duration_seconds.toFixed(2)}s</span>
+                        </div>
+                        ` : ''}
+                    </div>
+                    ${latest.error_message ? `
+                        <div class="alert alert-danger mt-3 mb-0">
+                            <i class="fas fa-exclamation-triangle"></i> ${latest.error_message}
+                        </div>
+                    ` : ''}
+                `;
+            } else {
+                statusDiv.innerHTML = `
+                    <div class="text-center text-muted">
+                        <i class="fas fa-inbox fa-3x mb-3"></i>
+                        <p>Nenhum backup realizado ainda.</p>
+                    </div>
+                `;
+            }
         }
     } catch (error) {
         console.error('Error loading status:', error);
@@ -359,13 +558,19 @@ async function loadBackups() {
     try {
         const response = await fetch('/api/backups?limit=50');
         const backups = await response.json();
+        allBackups = backups;
+        
+        // Update statistics and chart
+        updateStatistics(backups);
+        updateChart(backups);
         
         const tbody = document.getElementById('backupsTable');
         
         if (backups.length === 0) {
             tbody.innerHTML = `
                 <tr>
-                    <td colspan="7" class="text-center text-muted">
+                    <td colspan="7" class="text-center text-muted py-4">
+                        <i class="fas fa-inbox fa-3x mb-3 d-block"></i>
                         Nenhum backup encontrado.
                     </td>
                 </tr>
