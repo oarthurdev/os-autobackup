@@ -81,7 +81,7 @@ class SSHManager:
 
         for path in paths:
             if not self._is_safe_path(path):
-                raise ValueError(f"Invalid or potentially unsafe path: {path}")
+                raise ValueError(f"Invalid or unsafe path: {path}")
             validated_paths.append(shlex.quote(path))
 
             # Estimate total size
@@ -109,14 +109,25 @@ class SSHManager:
         if use_fast_compression is None:
             use_fast_compression = total_size >= 1073741824  # 1GB
 
-        # Use gzip level 1 (faster, slightly larger files) for large files
-        # For very large files, speed is more important than size
-        if use_fast_compression:
-            # Use gzip with compression level 1 via -I option
-            tar_command = f"tar -I 'gzip -1' -cf {shlex.quote(remote_archive_path)} {paths_str}"
-        else:
-            # Use default gzip compression (level 6)
-            tar_command = f"tar -czf {shlex.quote(remote_archive_path)} {paths_str}"
+        # Exclusions for virtual filesystems and unnecessary directories
+        # These should be excluded especially when backing up root "/"
+        exclusions = [
+            '/proc', '/sys', '/dev', '/run', '/tmp',
+            '/mnt', '/media', '/lost+found', '/snap',
+            '*/cache/*', '*/Cache/*', '*/temp/*', '*/Temp/*'
+        ]
+
+        exclude_str = ' '.join([f"--exclude={shlex.quote(e)}" for e in exclusions])
+
+
+        # Use pigz if available for faster compression, otherwise use gzip
+        tar_command = f"""
+            if command -v pigz &> /dev/null; then
+                tar {exclude_str} -I pigz -cf {shlex.quote(remote_archive_path)} {paths_str} 2>&1
+            else
+                tar {exclude_str} -czf {shlex.quote(remote_archive_path)} {paths_str} 2>&1
+            fi
+        """
 
         if progress_callback and total_size >= 1073741824:
             progress_callback(f"Tamanho estimado: {total_size / (1024*1024):.2f} MB - usando compressão rápida")
