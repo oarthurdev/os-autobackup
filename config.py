@@ -23,3 +23,8 @@ class Config:
     DATABASE_PATH = 'backups.db'
     LOGS_DIR = 'logs'
     TEMP_DIR = 'temp_backups'
+    
+    # Performance settings for large files
+    STREAMING_CHUNK_SIZE = int(os.getenv('STREAMING_CHUNK_SIZE', 8388608))  # 8MB default
+    LARGE_FILE_THRESHOLD = int(os.getenv('LARGE_FILE_THRESHOLD', 1073741824))  # 1GB
+    USE_FAST_COMPRESSION = os.getenv('USE_FAST_COMPRESSION', 'true').lower() == 'true'

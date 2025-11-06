@@ -14,6 +14,7 @@ A comprehensive backup solution for Ubuntu VPS servers with both CLI and web int
 - 💻 **CLI Tool** - English command-line interface for manual operations
 - 📝 **Logging** - Comprehensive logs for all operations
 - 📈 **History Tracking** - SQLite database for backup history
+- ⚡ **Performance Optimized** - Streaming encryption and fast compression for large files (>= 1GB)
 
 ## Quick Start
 

@@ -98,33 +98,27 @@ class BackupEngine:
             self.db.add_log(backup_id, 'INFO', 'Archive creation completed')
             
             local_archive = os.path.join(Config.TEMP_DIR, archive_name)
-            self.update_progress(4, 'Baixando arquivo de backup...')
-            self.logger.info(f"Downloading archive to: {local_archive}")
-            self.db.add_log(backup_id, 'INFO', 'Downloading archive')
+            encrypted_name = archive_name.replace('.tar.gz', '.encrypted')
+            encrypted_archive = os.path.join(Config.TEMP_DIR, encrypted_name)
             
-            ssh_manager.download_file(remote_archive, local_archive)
-            file_size = os.path.getsize(local_archive)
-            self.logger.info(f"Archive downloaded ({file_size} bytes)")
-            self.db.add_log(backup_id, 'INFO', f'Downloaded {file_size} bytes')
+            self.update_progress(4, 'Baixando e criptografando arquivo (streaming)...')
+            self.logger.info(f"Streaming download and encryption: {remote_archive}")
+            self.db.add_log(backup_id, 'INFO', 'Starting streaming download and encryption')
+            
+            encryptor = Encryptor()
+            file_size = ssh_manager.download_and_encrypt_streaming(
+                remote_archive, 
+                encrypted_archive,
+                encryptor,
+                progress_callback=lambda msg: self.db.add_log(backup_id, 'INFO', msg)
+            )
+            
+            self.logger.info(f"Streaming completed ({file_size} bytes)")
+            self.db.add_log(backup_id, 'INFO', f'Downloaded and encrypted {file_size} bytes')
             
             self.logger.info("Cleaning up remote archive")
             ssh_manager.remove_remote_file(remote_archive)
             ssh_manager.disconnect()
-            
-            encrypted_name = archive_name.replace('.tar.gz', '.encrypted')
-            encrypted_archive = os.path.join(Config.TEMP_DIR, encrypted_name)
-            
-            self.update_progress(5, 'Criptografando arquivo de backup...')
-            self.logger.info("Encrypting backup file...")
-            self.db.add_log(backup_id, 'INFO', 'Encrypting backup')
-            
-            encryptor = Encryptor()
-            encryptor.encrypt_file(local_archive, encrypted_archive)
-            
-            self.logger.info("Encryption completed")
-            self.db.add_log(backup_id, 'INFO', 'Encryption completed')
-            
-            os.remove(local_archive)
             
             self.update_progress(6, 'Enviando para Google Drive...')
             self.logger.info("Uploading to Google Drive...")
