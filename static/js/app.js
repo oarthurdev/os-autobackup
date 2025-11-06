@@ -91,35 +91,67 @@ function showInfo(message, duration = 4000) {
     return showToast(message, 'info', duration);
 }
 
-// Custom confirm dialog using toast (non-blocking alternative)
-function showConfirm(message, onConfirm, onCancel) {
-    const container = document.getElementById('toastContainer');
-    const toast = document.createElement('div');
-    toast.className = 'custom-toast toast-warning';
-
-    toast.innerHTML = `
-        <div class="toast-icon">
-            <i class="fas fa-question-circle"></i>
-        </div>
-        <div class="toast-content">
-            <div class="toast-title">Confirmação</div>
-            <div class="toast-message">${message}</div>
-            <div class="mt-2 d-flex gap-2">
-                <button class="btn btn-sm btn-success" onclick="handleConfirmYes(this, ${onConfirm})">
-                    <i class="fas fa-check"></i> Sim
-                </button>
-                <button class="btn btn-sm btn-danger" onclick="handleConfirmNo(this, ${onCancel})">
-                    <i class="fas fa-times"></i> Não
-                </button>
+// Custom Confirm Dialog System
+function showConfirm(title, message, onConfirm, onCancel) {
+    return new Promise((resolve) => {
+        const overlay = document.createElement('div');
+        overlay.className = 'confirm-overlay';
+        
+        overlay.innerHTML = `
+            <div class="confirm-modal">
+                <div class="confirm-icon">
+                    <i class="fas fa-question-circle"></i>
+                </div>
+                <div class="confirm-content">
+                    <h3 class="confirm-title">${title}</h3>
+                    <p class="confirm-message">${message}</p>
+                </div>
+                <div class="confirm-actions">
+                    <button class="btn-confirm-cancel">
+                        <i class="fas fa-times"></i> Cancelar
+                    </button>
+                    <button class="btn-confirm-ok">
+                        <i class="fas fa-check"></i> OK
+                    </button>
+                </div>
             </div>
-        </div>
-        <button class="toast-close" onclick="removeToast(this)">
-            <i class="fas fa-times"></i>
-        </button>
-    `;
-
-    container.appendChild(toast);
-    return toast;
+        `;
+        
+        document.body.appendChild(overlay);
+        
+        // Trigger animation
+        setTimeout(() => overlay.classList.add('show'), 10);
+        
+        const cancelBtn = overlay.querySelector('.btn-confirm-cancel');
+        const okBtn = overlay.querySelector('.btn-confirm-ok');
+        
+        const closeModal = (confirmed) => {
+            overlay.classList.remove('show');
+            setTimeout(() => {
+                overlay.remove();
+                resolve(confirmed);
+                if (confirmed && onConfirm) onConfirm();
+                if (!confirmed && onCancel) onCancel();
+            }, 300);
+        };
+        
+        cancelBtn.onclick = () => closeModal(false);
+        okBtn.onclick = () => closeModal(true);
+        
+        // Close on overlay click
+        overlay.onclick = (e) => {
+            if (e.target === overlay) closeModal(false);
+        };
+        
+        // Close on ESC key
+        const escHandler = (e) => {
+            if (e.key === 'Escape') {
+                closeModal(false);
+                document.removeEventListener('keydown', escHandler);
+            }
+        };
+        document.addEventListener('keydown', escHandler);
+    });
 }
 
 function loadTheme() {
@@ -418,9 +450,12 @@ async function saveHost() {
 }
 
 async function deleteHost(hostId) {
-    if (!confirm('Tem certeza que deseja excluir este servidor?')) {
-        return;
-    }
+    const confirmed = await showConfirm(
+        'Confirmar Exclusão',
+        'Tem certeza que deseja excluir este servidor?'
+    );
+
+    if (!confirmed) return;
 
     try {
         const response = await fetch(`/api/ssh-hosts/${hostId}`, {
@@ -508,7 +543,8 @@ async function showBackupModal() {
     }
 }
 
-async function startBackupWithHost() {
+// Nova função para exibir modal de confirmação de backup
+async function confirmBackup() {
     const hostId = document.getElementById('backupHostSelect').value;
 
     if (!hostId) {
@@ -516,10 +552,21 @@ async function startBackupWithHost() {
         return;
     }
 
-    if (!confirm('Deseja iniciar um backup agora para o servidor selecionado?')) {
-        return;
-    }
+    const confirmed = await showConfirm(
+        'localhost:5000 diz',
+        'Deseja iniciar um backup agora para o servidor selecionado?'
+    );
 
+    if (confirmed) {
+        startBackupNow(hostId);
+    }
+}
+
+async function startBackupWithHost() {
+    await confirmBackup();
+}
+
+async function startBackupNow(hostId) {
     try {
         const response = await fetch('/api/backup/start', {
             method: 'POST',
@@ -750,9 +797,12 @@ async function viewLogs(backupId) {
 }
 
 async function restoreBackup(backupId) {
-    if (!confirm('Deseja restaurar (descriptografar) este backup? O arquivo .tar.gz será baixado para seu computador.')) {
-        return;
-    }
+    const confirmed = await showConfirm(
+        'Restaurar Backup',
+        'Deseja restaurar (descriptografar) este backup? O arquivo .tar.gz será baixado para seu computador.'
+    );
+
+    if (!confirmed) return;
 
     const btn = event.target.closest('button');
     const originalContent = btn.innerHTML;
@@ -767,16 +817,15 @@ async function restoreBackup(backupId) {
         const result = await response.json();
 
         if (result.success) {
-            alert('✓ Backup descriptografado com sucesso!');
-
+            showSuccess('Backup descriptografado com sucesso!');
             // Fazer download automático
             window.location.href = result.download_path;
         } else {
-            alert('✗ Erro ao restaurar backup: ' + result.error);
+            showError('Erro ao restaurar backup: ' + result.error);
         }
     } catch (error) {
         console.error('Error restoring backup:', error);
-        alert('Erro ao restaurar backup');
+        showError('Erro ao restaurar backup');
     } finally {
         btn.disabled = false;
         btn.innerHTML = originalContent;
