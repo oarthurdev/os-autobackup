@@ -12,7 +12,11 @@ class Encryptor:
         elif Config.ENCRYPTION_KEY:
             self.key = base64.b64decode(Config.ENCRYPTION_KEY)
         else:
-            self.key = os.urandom(32)
+            raise Exception(
+                "No encryption key provided! "
+                "Generate a key with 'python cli.py genkey' and add it to your .env file as ENCRYPTION_KEY. "
+                "This ensures your backups can be decrypted later."
+            )
     
     @staticmethod
     def generate_key() -> str:

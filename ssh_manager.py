@@ -1,5 +1,6 @@
 import paramiko
 import os
+import shlex
 from typing import Optional
 from config import Config
 
@@ -16,7 +17,13 @@ class SSHManager:
     def connect(self) -> bool:
         try:
             self.client = paramiko.SSHClient()
-            self.client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+            self.client.load_system_host_keys()
+            
+            known_hosts_path = os.path.expanduser('~/.ssh/known_hosts')
+            if os.path.exists(known_hosts_path):
+                self.client.load_host_keys(known_hosts_path)
+            
+            self.client.set_missing_host_key_policy(paramiko.RejectPolicy())
             
             if self.key_path and os.path.exists(self.key_path):
                 self.client.connect(
@@ -56,10 +63,14 @@ class SSHManager:
         return stdout.read().decode('utf-8'), stderr.read().decode('utf-8'), exit_status
     
     def create_remote_archive(self, paths: list, archive_name: str, remote_temp_dir: str = '/tmp') -> str:
-        paths_str = ' '.join(paths)
-        archive_path = f"{remote_temp_dir}/{archive_name}"
+        for path in paths:
+            if not path.strip() or '..' in path or path.startswith('-'):
+                raise Exception(f"Invalid or potentially dangerous path: {path}")
         
-        command = f"tar -czf {archive_path} {paths_str} 2>&1"
+        quoted_paths = ' '.join(shlex.quote(path) for path in paths)
+        archive_path = f"{remote_temp_dir}/{shlex.quote(archive_name)}"
+        
+        command = f"tar -czf {archive_path} {quoted_paths} 2>&1"
         
         stdout, stderr, exit_status = self.execute_command(command)
         
