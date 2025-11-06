@@ -5,8 +5,8 @@ from typing import Optional
 from config import Config
 
 class SSHManager:
-    def __init__(self, host: str = None, port: int = None, username: str = None,
-                 password: str = None, key_path: str = None):
+    def __init__(self, host: Optional[str] = None, port: Optional[int] = None, username: Optional[str] = None,
+                 password: Optional[str] = None, key_path: Optional[str] = None):
         self.host = host or Config.VPS_HOST
         self.port = port or Config.VPS_PORT
         self.username = username or Config.VPS_USERNAME
@@ -181,11 +181,12 @@ class SSHManager:
         """Formata bytes para formato legível"""
         if bytes_size < 0:
             return "Invalid size"
+        size_float = float(bytes_size)
         for unit in ['B', 'KB', 'MB', 'GB', 'TB']:
-            if bytes_size < 1024.0:
-                return f"{bytes_size:.2f} {unit}"
-            bytes_size /= 1024.0
-        return f"{bytes_size:.2f} PB"
+            if size_float < 1024.0:
+                return f"{size_float:.2f} {unit}"
+            size_float /= 1024.0
+        return f"{size_float:.2f} PB"
 
     def download_file(self, remote_path: str, local_path: str):
         if not self.client:
@@ -222,7 +223,10 @@ class SSHManager:
         sftp = self.client.open_sftp()
         try:
             stat = sftp.stat(remote_path)
-            return stat.st_size
+            file_size = stat.st_size
+            if file_size is None:
+                raise Exception(f"Could not get file size for {remote_path}")
+            return file_size
         except FileNotFoundError:
             raise FileNotFoundError(f"Remote file not found: {remote_path}")
         except Exception as e:
@@ -257,6 +261,9 @@ class SSHManager:
             file_stat = sftp.stat(remote_path)
             file_size = file_stat.st_size
             
+            if file_size is None or file_size <= 0:
+                raise Exception(f"Invalid file size for {remote_path}")
+            
             if progress_callback:
                 progress_callback(f"Iniciando download de {self._format_bytes(file_size)}")
             
@@ -276,7 +283,7 @@ class SSHManager:
                         total_downloaded += len(chunk)
                         
                         # Update progress every 10MB
-                        if progress_callback and total_downloaded % (10 * 1024 * 1024) == 0:
+                        if progress_callback and file_size > 0 and total_downloaded % (10 * 1024 * 1024) == 0:
                             percentage = (total_downloaded / file_size) * 100
                             progress_callback(f"Baixado e criptografado: {self._format_bytes(total_downloaded)} ({percentage:.1f}%)")
                     

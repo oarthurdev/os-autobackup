@@ -1,6 +1,7 @@
 import os
 import time
 from datetime import datetime
+from typing import Optional
 from ssh_manager import SSHManager
 from encryption import Encryptor
 from drive_manager import GoogleDriveManager
@@ -42,7 +43,7 @@ class BackupEngine:
     def get_progress(self):
         return self.progress.copy()
     
-    def perform_backup(self, host_id: int = None, paths: list = None) -> dict:
+    def perform_backup(self, host_id: Optional[int] = None, paths: Optional[list] = None) -> dict:
         start_time = datetime.now()
         start_time_str = start_time.isoformat()
         
@@ -90,7 +91,8 @@ class BackupEngine:
             
             def archive_progress_callback(message):
                 self.update_progress(3, f'Criando arquivo de backup: {message}')
-                self.logger.info(message)
+                if self.logger:
+                    self.logger.info(message)
                 self.db.add_log(backup_id, 'INFO', message)
             
             remote_archive = ssh_manager.create_remote_archive(paths, archive_name, progress_callback=archive_progress_callback)

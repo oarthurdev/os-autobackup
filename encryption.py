@@ -1,12 +1,13 @@
 import os
 import base64
+from typing import Optional
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import padding
 from config import Config
 
 class Encryptor:
-    def __init__(self, key: str = None):
+    def __init__(self, key: Optional[str] = None):
         if key:
             self.key = base64.b64decode(key)
         elif Config.ENCRYPTION_KEY:
