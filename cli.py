@@ -15,7 +15,7 @@ ssh_host_manager = SSHHostManager()
 
 @click.group()
 def cli():
-    """Ubuntu AutoBackup CLI Tool"""
+    """OS Backup CLI Tool"""
     pass
 
 @cli.command()

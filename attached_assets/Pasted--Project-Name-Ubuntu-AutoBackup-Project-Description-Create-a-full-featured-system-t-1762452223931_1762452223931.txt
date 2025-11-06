@@ -1,4 +1,4 @@
-**Project Name:** `Ubuntu AutoBackup`
+**Project Name:** `OS Backup`
 
 **Project Description:**  
 Create a full-featured system that performs **automatic daily full backups** of a remote Ubuntu VPS. The system must include both a **CLI tool** and a **Web interface (dashboard)**. The backup must include the **entire system**, including files, databases, and configurations.

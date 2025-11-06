@@ -180,4 +180,4 @@ As notificações se adaptam automaticamente ao tema:
 
 ---
 
-**Desenvolvido com ❤️ para o Ubuntu AutoBackup**
+**Desenvolvido com ❤️ para o OS Backup**

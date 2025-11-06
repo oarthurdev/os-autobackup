@@ -1,4 +1,4 @@
-# Ubuntu AutoBackup
+# OS Backup
 
 A comprehensive backup solution for Ubuntu VPS servers with both CLI and web interfaces.
 

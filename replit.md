@@ -1,4 +1,4 @@
-# Ubuntu AutoBackup
+# OS Backup
 
 ## Project Overview
 A Python-based automated backup system for Ubuntu VPS servers with CLI and web dashboard interfaces. The system performs SSH-based backups, encrypts them with AES-256, and uploads them to Google Drive. Now features multi-host management through the web interface.
