@@ -4,11 +4,13 @@ import click
 from backup_engine import BackupEngine
 from database import Database
 from encryption import Encryptor
+from ssh_host_manager import SSHHostManager
 from tabulate import tabulate
 from datetime import datetime
 
 backup_engine = BackupEngine()
 db = Database()
+ssh_host_manager = SSHHostManager()
 
 @click.group()
 def cli():
@@ -16,14 +18,18 @@ def cli():
     pass
 
 @cli.command()
+@click.option('--host-id', '-h', type=int, help='SSH host ID to backup')
 @click.option('--paths', '-p', help='Comma-separated paths to backup')
-def backup(paths):
+def backup(host_id, paths):
     """Perform a manual backup"""
-    click.echo("Starting backup process...")
+    if host_id:
+        click.echo(f"Starting backup for Host ID {host_id}...")
+    else:
+        click.echo("Starting backup process...")
     
     paths_list = paths.split(',') if paths else None
     
-    result = backup_engine.perform_backup(paths_list)
+    result = backup_engine.perform_backup(host_id=host_id, paths=paths_list)
     
     if result['success']:
         click.echo(f"\n✓ Backup completed successfully!")
@@ -107,6 +113,39 @@ def genkey():
     click.echo("\nGenerated Encryption Key:")
     click.echo(key)
     click.echo("\nAdd this to your .env file as ENCRYPTION_KEY")
+
+@cli.command()
+def hosts():
+    """List all SSH hosts"""
+    all_hosts = ssh_host_manager.get_all_hosts()
+    
+    if not all_hosts:
+        click.echo("No SSH hosts configured.")
+        click.echo("\nUse the web interface to add SSH hosts or configure them in .env file.")
+        return
+    
+    table_data = []
+    for host in all_hosts:
+        status = 'Connected' if host.get('connection_status', '').startswith('SUCCESS') else \
+                'Failed' if host.get('connection_status', '').startswith('FAILED') else \
+                'Not tested'
+        
+        auth_type = 'Password' if host['auth_type'] == 'password' else 'SSH Key'
+        
+        table_data.append([
+            host['id'],
+            host['name'],
+            host['host'],
+            host['port'],
+            host['username'],
+            auth_type,
+            status
+        ])
+    
+    headers = ['ID', 'Name', 'Host', 'Port', 'Username', 'Auth', 'Status']
+    click.echo("\nConfigured SSH Hosts:")
+    click.echo(tabulate(table_data, headers=headers, tablefmt='grid'))
+    click.echo(f"\nTo backup a specific host, use: python cli.py backup --host-id <ID>")
 
 if __name__ == '__main__':
     cli()

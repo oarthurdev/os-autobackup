@@ -4,7 +4,9 @@ A comprehensive backup solution for Ubuntu VPS servers with both CLI and web int
 
 ## Features
 
+- 🖥️ **Multi-Host Management** - Manage multiple SSH servers through web interface
 - 🔒 **Secure SSH Connection** - Connect to remote VPS via SSH (password or key-based)
+- 🔐 **Encrypted Credentials** - SSH credentials stored encrypted in database
 - 📦 **Compression** - Create tar.gz archives of specified directories
 - 🔐 **Encryption** - AES-256 encryption for backup files
 - ☁️ **Cloud Storage** - Automatic upload to Google Drive
@@ -21,19 +23,15 @@ A comprehensive backup solution for Ubuntu VPS servers with both CLI and web int
 pip install -r requirements.txt
 ```
 
-### 2. Configure Environment
+### 2. Generate Encryption Key
 
-Copy `.env.example` to `.env` and fill in your details:
+Generate a secure encryption key for backup files:
 
 ```bash
-cp .env.example .env
+python cli.py genkey
 ```
 
-Required configuration:
-- VPS connection details (SSH)
-- Backup paths to archive
-- Encryption key (generate with: `python cli.py genkey`)
-- Google Drive API credentials
+Save this key securely - you'll need it to decrypt your backups.
 
 ### 3. Google Drive Setup
 
@@ -44,7 +42,7 @@ Required configuration:
 5. Download credentials as `credentials.json`
 6. Place `credentials.json` in the project root
 
-### 4. Web Interface
+### 4. Start the Web Interface
 
 Start the Flask server:
 
@@ -54,13 +52,34 @@ python app.py
 
 Access the dashboard at: `http://localhost:5000`
 
-### 5. CLI Tool
+### 5. Add SSH Servers
+
+Through the web interface:
+
+1. Click "Adicionar Servidor" (Add Server)
+2. Enter server details:
+   - Name (e.g., "Production Server")
+   - Host/IP address
+   - SSH port (default: 22)
+   - Username
+   - Authentication type (Password or SSH Key)
+   - Credentials (password or key path)
+   - Backup paths (comma-separated)
+3. Click "Salvar" (Save)
+4. Test connection with the "Test" button
+
+**Note**: SSH credentials are stored encrypted in the database for security.
+
+### 6. CLI Tool
 
 Available commands:
 
 ```bash
-# Perform manual backup
-python cli.py backup
+# List configured SSH hosts
+python cli.py hosts
+
+# Perform backup for a specific host
+python cli.py backup --host-id 1
 
 # Show backup history
 python cli.py history --limit 20
@@ -77,32 +96,38 @@ python cli.py genkey
 
 ## Configuration
 
-### Environment Variables
+### SSH Server Management
+
+SSH servers are now managed through the **web interface** instead of environment variables. This allows you to:
+
+- Manage multiple servers from one dashboard
+- Store credentials securely encrypted in the database
+- Test connections before running backups
+- Easily add, edit, or remove servers
+
+### Optional Environment Variables
 
 | Variable | Description | Example |
 |----------|-------------|---------|
-| `VPS_HOST` | VPS IP or hostname | `192.168.1.100` |
-| `VPS_PORT` | SSH port | `22` |
-| `VPS_USERNAME` | SSH username | `root` |
-| `VPS_PASSWORD` | SSH password (if not using key) | `your_password` |
-| `VPS_KEY_PATH` | Path to SSH private key | `/path/to/key.pem` |
-| `BACKUP_PATHS` | Comma-separated paths to backup | `/home,/etc,/var/www` |
-| `ENCRYPTION_KEY` | Base64 encryption key | Generate with `cli.py genkey` |
+| `ENCRYPTION_KEY` | Base64 encryption key for backups | Generate with `cli.py genkey` |
 | `GOOGLE_DRIVE_FOLDER_ID` | Target folder ID in Google Drive | `1a2b3c4d5e6f7g8h9i` |
+| `GOOGLE_DRIVE_CREDENTIALS_FILE` | Path to credentials.json | `credentials.json` |
 
 ## Web Interface (Portuguese)
 
 The web dashboard provides:
+- 🖥️ **SSH Server Management** - Add, edit, delete, and test SSH connections
 - ✅ Current backup status
 - 📋 Complete backup history
 - 📄 Detailed logs for each backup
 - ⬇️ Download links to Google Drive files
-- ▶️ "Force Backup Now" button
+- ▶️ "Force Backup Now" button with server selection
 
 ## CLI Interface (English)
 
 Command-line tool for:
-- Manual backup execution
+- Listing configured SSH hosts
+- Manual backup execution for specific hosts
 - Viewing backup history
 - Checking logs
 - Monitoring status
@@ -110,18 +135,22 @@ Command-line tool for:
 
 ## Security Notes
 
-- Never commit `.env` file or `credentials.json`
-- Store encryption keys securely
+- **SSH credentials are encrypted** in the database using Fernet symmetric encryption
+- Never commit `credentials.json` or `credentials.key`
+- Store encryption keys securely (required to decrypt backups)
 - Use SSH keys instead of passwords when possible
-- Backup files are encrypted before upload
+- Backup files are encrypted with AES-256 before upload
 - Google Drive uses OAuth2 authentication
+- SSH connections use strict host key verification (must add hosts to known_hosts)
 
 ## Troubleshooting
 
 ### SSH Connection Issues
-- Verify VPS hostname and credentials
+- **Host key not found**: Run `ssh-keyscan -H <your_host> >> ~/.ssh/known_hosts`
+- Test connection using the "Test" button in the web interface
+- Verify SSH credentials are correct
 - Check firewall rules
-- Ensure SSH service is running
+- Ensure SSH service is running on the remote server
 
 ### Google Drive Upload Issues
 - Verify credentials.json is valid

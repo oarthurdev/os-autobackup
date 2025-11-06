@@ -42,6 +42,24 @@ class Database:
             )
         ''')
         
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS ssh_hosts (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL UNIQUE,
+                host TEXT NOT NULL,
+                port INTEGER DEFAULT 22,
+                username TEXT NOT NULL,
+                auth_type TEXT NOT NULL,
+                encrypted_password TEXT,
+                encrypted_key_path TEXT,
+                backup_paths TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                last_connection_test TEXT,
+                connection_status TEXT
+            )
+        ''')
+        
         conn.commit()
         conn.close()
     
@@ -138,3 +156,90 @@ class Database:
         conn.close()
         
         return dict(row) if row else None
+    
+    def create_ssh_host(self, name: str, host: str, port: int, username: str,
+                       auth_type: str, encrypted_password: str, encrypted_key_path: str,
+                       backup_paths: str) -> int:
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        
+        now = datetime.now().isoformat()
+        cursor.execute('''
+            INSERT INTO ssh_hosts 
+            (name, host, port, username, auth_type, encrypted_password, 
+             encrypted_key_path, backup_paths, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ''', (name, host, port, username, auth_type, encrypted_password,
+              encrypted_key_path, backup_paths, now, now))
+        
+        host_id = cursor.lastrowid
+        conn.commit()
+        conn.close()
+        
+        return host_id
+    
+    def update_ssh_host(self, host_id: int, name: str, host: str, port: int,
+                       username: str, auth_type: str, encrypted_password: str,
+                       encrypted_key_path: str, backup_paths: str):
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        
+        now = datetime.now().isoformat()
+        cursor.execute('''
+            UPDATE ssh_hosts
+            SET name = ?, host = ?, port = ?, username = ?, auth_type = ?,
+                encrypted_password = ?, encrypted_key_path = ?, backup_paths = ?,
+                updated_at = ?
+            WHERE id = ?
+        ''', (name, host, port, username, auth_type, encrypted_password,
+              encrypted_key_path, backup_paths, now, host_id))
+        
+        conn.commit()
+        conn.close()
+    
+    def delete_ssh_host(self, host_id: int):
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute('DELETE FROM ssh_hosts WHERE id = ?', (host_id,))
+        
+        conn.commit()
+        conn.close()
+    
+    def get_all_ssh_hosts(self) -> List[Dict]:
+        conn = self.get_connection()
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        
+        cursor.execute('SELECT * FROM ssh_hosts ORDER BY name ASC')
+        
+        rows = cursor.fetchall()
+        conn.close()
+        
+        return [dict(row) for row in rows]
+    
+    def get_ssh_host(self, host_id: int) -> Optional[Dict]:
+        conn = self.get_connection()
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        
+        cursor.execute('SELECT * FROM ssh_hosts WHERE id = ?', (host_id,))
+        
+        row = cursor.fetchone()
+        conn.close()
+        
+        return dict(row) if row else None
+    
+    def update_ssh_host_connection_status(self, host_id: int, status: str):
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        
+        now = datetime.now().isoformat()
+        cursor.execute('''
+            UPDATE ssh_hosts
+            SET connection_status = ?, last_connection_test = ?
+            WHERE id = ?
+        ''', (status, now, host_id))
+        
+        conn.commit()
+        conn.close()

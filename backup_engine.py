@@ -7,15 +7,17 @@ from drive_manager import GoogleDriveManager
 from database import Database
 from logger import BackupLogger
 from config import Config
+from ssh_host_manager import SSHHostManager
 
 class BackupEngine:
     def __init__(self):
         self.db = Database()
         self.logger = None
+        self.ssh_host_manager = SSHHostManager()
         
         os.makedirs(Config.TEMP_DIR, exist_ok=True)
     
-    def perform_backup(self, paths: list = None) -> dict:
+    def perform_backup(self, host_id: int = None, paths: list = None) -> dict:
         start_time = datetime.now()
         start_time_str = start_time.isoformat()
         
@@ -31,13 +33,23 @@ class BackupEngine:
         remote_archive = None
         
         try:
-            paths = paths or Config.BACKUP_PATHS
+            if host_id:
+                ssh_manager = self.ssh_host_manager.get_ssh_manager(host_id)
+                if not paths:
+                    paths = self.ssh_host_manager.get_backup_paths(host_id)
+                host_info = self.ssh_host_manager.get_host(host_id)
+                host_name = host_info['name'] if host_info else f"Host {host_id}"
+            else:
+                if not paths:
+                    paths = Config.BACKUP_PATHS
+                ssh_manager = SSHManager()
+                host_name = Config.VPS_HOST
+            
             self.logger.info(f"Backup paths: {', '.join(paths)}")
             self.db.add_log(backup_id, 'INFO', f"Paths to backup: {', '.join(paths)}")
             
-            self.logger.info("Connecting to VPS via SSH...")
-            self.db.add_log(backup_id, 'INFO', f"Connecting to {Config.VPS_HOST}")
-            ssh_manager = SSHManager()
+            self.logger.info(f"Connecting to {host_name} via SSH...")
+            self.db.add_log(backup_id, 'INFO', f"Connecting to {host_name}")
             ssh_manager.connect()
             self.logger.info("SSH connection established")
             self.db.add_log(backup_id, 'INFO', 'SSH connection successful')
