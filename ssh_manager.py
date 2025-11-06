@@ -62,7 +62,7 @@ class SSHManager:
         
         return stdout.read().decode('utf-8'), stderr.read().decode('utf-8'), exit_status
     
-    def create_remote_archive(self, paths: list, archive_name: str, remote_temp_dir: str = '/tmp') -> str:
+    def create_remote_archive(self, paths: list, archive_name: str, remote_temp_dir: str = '/tmp', progress_callback=None) -> str:
         for path in paths:
             if not path.strip() or '..' in path or path.startswith('-'):
                 raise Exception(f"Invalid or potentially dangerous path: {path}")
@@ -70,6 +70,18 @@ class SSHManager:
         quoted_paths = ' '.join(shlex.quote(path) for path in paths)
         archive_path = f"{remote_temp_dir}/{shlex.quote(archive_name)}"
         
+        # Primeiro, calcular o tamanho total dos arquivos
+        if progress_callback:
+            size_command = f"du -sb {quoted_paths} 2>/dev/null | awk '{{sum+=$1}} END {{print sum}}'"
+            stdout, _, _ = self.execute_command(size_command)
+            try:
+                total_size = int(stdout.strip())
+                if total_size > 0:
+                    progress_callback(f"Tamanho total a compactar: {self._format_bytes(total_size)}")
+            except:
+                pass
+        
+        # Criar o arquivo
         command = f"tar -czf {archive_path} {quoted_paths} 2>&1"
         
         stdout, stderr, exit_status = self.execute_command(command)
@@ -77,7 +89,25 @@ class SSHManager:
         if exit_status != 0:
             raise Exception(f"Failed to create archive: {stderr}")
         
+        # Verificar o tamanho do arquivo criado
+        if progress_callback:
+            stat_command = f"stat -c%s {archive_path} 2>/dev/null"
+            stdout, _, _ = self.execute_command(stat_command)
+            try:
+                archive_size = int(stdout.strip())
+                progress_callback(f"Arquivo compactado criado: {self._format_bytes(archive_size)}")
+            except:
+                pass
+        
         return archive_path
+    
+    def _format_bytes(self, bytes_size: int) -> str:
+        """Formata bytes para formato legível"""
+        for unit in ['B', 'KB', 'MB', 'GB', 'TB']:
+            if bytes_size < 1024.0:
+                return f"{bytes_size:.2f} {unit}"
+            bytes_size /= 1024.0
+        return f"{bytes_size:.2f} PB"
     
     def download_file(self, remote_path: str, local_path: str):
         if not self.client:

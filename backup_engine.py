@@ -88,7 +88,12 @@ class BackupEngine:
             self.logger.info(f"Creating remote archive: {archive_name}")
             self.db.add_log(backup_id, 'INFO', f"Creating archive: {archive_name}")
             
-            remote_archive = ssh_manager.create_remote_archive(paths, archive_name)
+            def archive_progress_callback(message):
+                self.update_progress(3, f'Criando arquivo de backup: {message}')
+                self.logger.info(message)
+                self.db.add_log(backup_id, 'INFO', message)
+            
+            remote_archive = ssh_manager.create_remote_archive(paths, archive_name, progress_callback=archive_progress_callback)
             self.logger.info(f"Remote archive created: {remote_archive}")
             self.db.add_log(backup_id, 'INFO', 'Archive creation completed')
             
