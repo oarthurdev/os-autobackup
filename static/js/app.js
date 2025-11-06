@@ -28,21 +28,21 @@ function showToast(message, type = 'info', duration = 4000) {
     const container = document.getElementById('toastContainer');
     const toast = document.createElement('div');
     toast.className = `custom-toast toast-${type}`;
-    
+
     const icons = {
         success: 'fa-check-circle',
         error: 'fa-exclamation-circle',
         warning: 'fa-exclamation-triangle',
         info: 'fa-info-circle'
     };
-    
+
     const titles = {
         success: 'Sucesso',
         error: 'Erro',
         warning: 'Atenção',
         info: 'Informação'
     };
-    
+
     toast.innerHTML = `
         <div class="toast-icon">
             <i class="fas ${icons[type]}"></i>
@@ -55,14 +55,14 @@ function showToast(message, type = 'info', duration = 4000) {
             <i class="fas fa-times"></i>
         </button>
     `;
-    
+
     container.appendChild(toast);
-    
+
     // Auto remove after duration
     setTimeout(() => {
         removeToast(toast);
     }, duration);
-    
+
     return toast;
 }
 
@@ -96,7 +96,7 @@ function showConfirm(message, onConfirm, onCancel) {
     const container = document.getElementById('toastContainer');
     const toast = document.createElement('div');
     toast.className = 'custom-toast toast-warning';
-    
+
     toast.innerHTML = `
         <div class="toast-icon">
             <i class="fas fa-question-circle"></i>
@@ -117,7 +117,7 @@ function showConfirm(message, onConfirm, onCancel) {
             <i class="fas fa-times"></i>
         </button>
     `;
-    
+
     container.appendChild(toast);
     return toast;
 }
