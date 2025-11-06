@@ -23,6 +23,105 @@ document.addEventListener('DOMContentLoaded', function() {
     setInterval(loadBackups, 10000);
 });
 
+// Custom Toast Notification System
+function showToast(message, type = 'info', duration = 4000) {
+    const container = document.getElementById('toastContainer');
+    const toast = document.createElement('div');
+    toast.className = `custom-toast toast-${type}`;
+    
+    const icons = {
+        success: 'fa-check-circle',
+        error: 'fa-exclamation-circle',
+        warning: 'fa-exclamation-triangle',
+        info: 'fa-info-circle'
+    };
+    
+    const titles = {
+        success: 'Sucesso',
+        error: 'Erro',
+        warning: 'Atenção',
+        info: 'Informação'
+    };
+    
+    toast.innerHTML = `
+        <div class="toast-icon">
+            <i class="fas ${icons[type]}"></i>
+        </div>
+        <div class="toast-content">
+            <div class="toast-title">${titles[type]}</div>
+            <div class="toast-message">${message}</div>
+        </div>
+        <button class="toast-close" onclick="removeToast(this)">
+            <i class="fas fa-times"></i>
+        </button>
+    `;
+    
+    container.appendChild(toast);
+    
+    // Auto remove after duration
+    setTimeout(() => {
+        removeToast(toast);
+    }, duration);
+    
+    return toast;
+}
+
+function removeToast(element) {
+    const toast = element.classList ? element : element.parentElement.parentElement;
+    toast.classList.add('toast-removing');
+    setTimeout(() => {
+        toast.remove();
+    }, 300);
+}
+
+// Convenience functions
+function showSuccess(message, duration = 4000) {
+    return showToast(message, 'success', duration);
+}
+
+function showError(message, duration = 5000) {
+    return showToast(message, 'error', duration);
+}
+
+function showWarning(message, duration = 4500) {
+    return showToast(message, 'warning', duration);
+}
+
+function showInfo(message, duration = 4000) {
+    return showToast(message, 'info', duration);
+}
+
+// Custom confirm dialog using toast (non-blocking alternative)
+function showConfirm(message, onConfirm, onCancel) {
+    const container = document.getElementById('toastContainer');
+    const toast = document.createElement('div');
+    toast.className = 'custom-toast toast-warning';
+    
+    toast.innerHTML = `
+        <div class="toast-icon">
+            <i class="fas fa-question-circle"></i>
+        </div>
+        <div class="toast-content">
+            <div class="toast-title">Confirmação</div>
+            <div class="toast-message">${message}</div>
+            <div class="mt-2 d-flex gap-2">
+                <button class="btn btn-sm btn-success" onclick="handleConfirmYes(this, ${onConfirm})">
+                    <i class="fas fa-check"></i> Sim
+                </button>
+                <button class="btn btn-sm btn-danger" onclick="handleConfirmNo(this, ${onCancel})">
+                    <i class="fas fa-times"></i> Não
+                </button>
+            </div>
+        </div>
+        <button class="toast-close" onclick="removeToast(this)">
+            <i class="fas fa-times"></i>
+        </button>
+    `;
+    
+    container.appendChild(toast);
+    return toast;
+}
+
 function loadTheme() {
     const theme = localStorage.getItem('theme') || 'light';
     document.documentElement.setAttribute('data-theme', theme);
@@ -252,7 +351,7 @@ async function showEditHostModal(hostId) {
         }
     } catch (error) {
         console.error('Error loading host:', error);
-        alert('Erro ao carregar dados do servidor');
+        showError('Erro ao carregar dados do servidor');
     }
 }
 
@@ -268,7 +367,7 @@ async function saveHost() {
     const backupPaths = document.getElementById('hostBackupPaths').value.trim();
 
     if (!name || !host || !username || !backupPaths) {
-        alert('Por favor, preencha todos os campos obrigatórios');
+        showWarning('Por favor, preencha todos os campos obrigatórios');
         return;
     }
 
@@ -306,15 +405,15 @@ async function saveHost() {
         const result = await response.json();
 
         if (result.success) {
-            alert(result.message);
+            showSuccess(result.message);
             hostModal.hide();
             loadSSHHosts();
         } else {
-            alert('Erro: ' + (result.error || 'Falha ao salvar'));
+            showError('Erro: ' + (result.error || 'Falha ao salvar'));
         }
     } catch (error) {
         console.error('Error saving host:', error);
-        alert('Erro ao salvar servidor');
+        showError('Erro ao salvar servidor');
     }
 }
 
@@ -331,14 +430,14 @@ async function deleteHost(hostId) {
         const result = await response.json();
 
         if (result.success) {
-            alert(result.message);
+            showSuccess(result.message);
             loadSSHHosts();
         } else {
-            alert('Erro: ' + (result.error || 'Falha ao excluir'));
+            showError('Erro: ' + (result.error || 'Falha ao excluir'));
         }
     } catch (error) {
         console.error('Error deleting host:', error);
-        alert('Erro ao excluir servidor');
+        showError('Erro ao excluir servidor');
     }
 }
 
@@ -356,15 +455,15 @@ async function testConnection(hostId) {
         const result = await response.json();
 
         if (result.success) {
-            alert('✓ ' + result.message);
+            showSuccess(result.message);
         } else {
-            alert('✗ ' + result.message);
+            showError(result.message);
         }
 
         loadSSHHosts();
     } catch (error) {
         console.error('Error testing connection:', error);
-        alert('Erro ao testar conexão');
+        showError('Erro ao testar conexão');
     } finally {
         btn.disabled = false;
         btn.innerHTML = originalContent;
@@ -394,7 +493,7 @@ async function showBackupModal() {
 
         if (hosts.length === 0) {
             select.innerHTML = '<option value="">Nenhum servidor cadastrado</option>';
-            alert('Você precisa cadastrar um servidor SSH primeiro');
+            showWarning('Você precisa cadastrar um servidor SSH primeiro');
             return;
         }
 
@@ -405,7 +504,7 @@ async function showBackupModal() {
         backupModal.show();
     } catch (error) {
         console.error('Error loading hosts for backup:', error);
-        alert('Erro ao carregar servidores');
+        showError('Erro ao carregar servidores');
     }
 }
 
@@ -413,7 +512,7 @@ async function startBackupWithHost() {
     const hostId = document.getElementById('backupHostSelect').value;
 
     if (!hostId) {
-        alert('Por favor, selecione um servidor');
+        showWarning('Por favor, selecione um servidor');
         return;
     }
 
@@ -433,16 +532,16 @@ async function startBackupWithHost() {
         const data = await response.json();
 
         if (data.success) {
-            alert('Backup iniciado com sucesso!');
+            showSuccess('Backup iniciado com sucesso!');
             backupModal.hide();
             loadStatus();
             setTimeout(loadBackups, 3000);
         } else {
-            alert('Erro: ' + (data.error || 'Falha ao iniciar backup'));
+            showError('Erro: ' + (data.error || 'Falha ao iniciar backup'));
         }
     } catch (error) {
         console.error('Error starting backup:', error);
-        alert('Erro ao iniciar backup');
+        showError('Erro ao iniciar backup');
     }
 }
 

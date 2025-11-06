@@ -63,6 +63,24 @@ A Python-based automated backup system for Ubuntu VPS servers with CLI and web d
 **Note**: SSH server credentials are now managed through the web interface and stored encrypted in the database, not in environment variables.
 
 ## Recent Changes
+- **Custom Toast Notification System** (2025-11-06)
+  - Replaced native JavaScript `alert()` with modern toast notifications
+  - Created custom notification component with 4 types: Success, Error, Warning, Info
+  - Added CSS animations (slide-in/slide-out from top-right)
+  - Fully responsive design with mobile adaptation
+  - Dark/light theme support
+  - Auto-dismiss with configurable duration
+  - Non-blocking user experience
+  - Added convenience functions: `showSuccess()`, `showError()`, `showWarning()`, `showInfo()`
+  - Created documentation in TOAST_NOTIFICATIONS.md
+
+- **Bug Fixes - Streaming Backup** (2025-11-06)
+  - Fixed missing `download_and_encrypt_streaming()` method in SSHManager
+  - Implemented streaming encryption methods in Encryptor class
+  - Added progress tracking with callbacks
+  - Fixed all LSP type errors (13 → 0)
+  - Improved type annotations with Optional typing
+
 - **SSH Host Management System** (2025-11-06)
   - Added ssh_hosts table to database with encrypted credentials
   - Created credentials_manager.py for Fernet encryption
