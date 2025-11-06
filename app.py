@@ -42,9 +42,11 @@ def get_backup_logs(backup_id):
 @app.route('/api/backup/status')
 def backup_status():
     latest = db.get_latest_backup()
+    progress = backup_engine.get_progress() if backup_in_progress else None
     return jsonify({
         'in_progress': backup_in_progress,
-        'latest_backup': latest
+        'latest_backup': latest,
+        'progress': progress
     })
 
 @app.route('/api/backup/start', methods=['POST'])

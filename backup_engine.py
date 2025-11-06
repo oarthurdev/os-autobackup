@@ -14,12 +14,40 @@ class BackupEngine:
         self.db = Database()
         self.logger = None
         self.ssh_host_manager = SSHHostManager()
+        self.progress = {
+            'status': 'idle',
+            'current_step': '',
+            'percentage': 0,
+            'total_steps': 7,
+            'current_step_number': 0
+        }
         
         os.makedirs(Config.TEMP_DIR, exist_ok=True)
+    
+    def update_progress(self, step_number: int, step_name: str):
+        self.progress['current_step_number'] = step_number
+        self.progress['current_step'] = step_name
+        self.progress['percentage'] = int((step_number / self.progress['total_steps']) * 100)
+        self.progress['status'] = 'in_progress'
+    
+    def reset_progress(self):
+        self.progress = {
+            'status': 'idle',
+            'current_step': '',
+            'percentage': 0,
+            'total_steps': 7,
+            'current_step_number': 0
+        }
+    
+    def get_progress(self):
+        return self.progress.copy()
     
     def perform_backup(self, host_id: int = None, paths: list = None) -> dict:
         start_time = datetime.now()
         start_time_str = start_time.isoformat()
+        
+        self.reset_progress()
+        self.update_progress(1, 'Iniciando backup...')
         
         backup_id = self.db.create_backup_record(start_time_str)
         self.logger = BackupLogger(backup_id)
@@ -48,6 +76,7 @@ class BackupEngine:
             self.logger.info(f"Backup paths: {', '.join(paths)}")
             self.db.add_log(backup_id, 'INFO', f"Paths to backup: {', '.join(paths)}")
             
+            self.update_progress(2, f'Conectando ao servidor {host_name}...')
             self.logger.info(f"Connecting to {host_name} via SSH...")
             self.db.add_log(backup_id, 'INFO', f"Connecting to {host_name}")
             ssh_manager.connect()
@@ -55,6 +84,7 @@ class BackupEngine:
             self.db.add_log(backup_id, 'INFO', 'SSH connection successful')
             
             archive_name = f"backup_{datetime.now().strftime('%Y%m%d_%H%M%S')}.tar.gz"
+            self.update_progress(3, 'Criando arquivo de backup no servidor...')
             self.logger.info(f"Creating remote archive: {archive_name}")
             self.db.add_log(backup_id, 'INFO', f"Creating archive: {archive_name}")
             
@@ -63,6 +93,7 @@ class BackupEngine:
             self.db.add_log(backup_id, 'INFO', 'Archive creation completed')
             
             local_archive = os.path.join(Config.TEMP_DIR, archive_name)
+            self.update_progress(4, 'Baixando arquivo de backup...')
             self.logger.info(f"Downloading archive to: {local_archive}")
             self.db.add_log(backup_id, 'INFO', 'Downloading archive')
             
@@ -78,6 +109,7 @@ class BackupEngine:
             encrypted_name = archive_name.replace('.tar.gz', '.encrypted')
             encrypted_archive = os.path.join(Config.TEMP_DIR, encrypted_name)
             
+            self.update_progress(5, 'Criptografando arquivo de backup...')
             self.logger.info("Encrypting backup file...")
             self.db.add_log(backup_id, 'INFO', 'Encrypting backup')
             
@@ -89,6 +121,7 @@ class BackupEngine:
             
             os.remove(local_archive)
             
+            self.update_progress(6, 'Enviando para Google Drive...')
             self.logger.info("Uploading to Google Drive...")
             self.db.add_log(backup_id, 'INFO', 'Uploading to Google Drive')
             
@@ -99,6 +132,8 @@ class BackupEngine:
             self.db.add_log(backup_id, 'INFO', f'Upload completed: {drive_file_id}')
             
             os.remove(encrypted_archive)
+            
+            self.update_progress(7, 'Backup concluído com sucesso!')
             
             end_time = datetime.now()
             duration = (end_time - start_time).total_seconds()
@@ -116,6 +151,8 @@ class BackupEngine:
             self.logger.info(f"Backup completed successfully in {duration:.2f} seconds")
             self.db.add_log(backup_id, 'INFO', f'Backup completed ({duration:.2f}s)')
             
+            self.progress['status'] = 'completed'
+            
             return {
                 'success': True,
                 'backup_id': backup_id,
@@ -129,6 +166,9 @@ class BackupEngine:
             error_msg = str(e)
             self.logger.error(f"Backup failed: {error_msg}")
             self.db.add_log(backup_id, 'ERROR', error_msg)
+            
+            self.progress['status'] = 'failed'
+            self.progress['current_step'] = f'Erro: {error_msg}'
             
             end_time = datetime.now()
             duration = (end_time - start_time).total_seconds()

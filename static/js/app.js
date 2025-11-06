@@ -307,11 +307,31 @@ async function loadStatus() {
         
         const statusDiv = document.getElementById('currentStatus');
         
-        if (data.in_progress) {
+        if (data.in_progress && data.progress) {
+            const progress = data.progress;
             statusDiv.innerHTML = `
                 <p><strong>Status:</strong> <span class="badge status-in-progress">
                     <span class="spinner-border spinner-border-sm"></span> Backup em Andamento
                 </span></p>
+                <div class="mt-3">
+                    <div class="d-flex justify-content-between mb-2">
+                        <strong>Progresso:</strong>
+                        <span>${progress.percentage}%</span>
+                    </div>
+                    <div class="progress" style="height: 25px;">
+                        <div class="progress-bar progress-bar-striped progress-bar-animated bg-primary" 
+                             role="progressbar" 
+                             style="width: ${progress.percentage}%"
+                             aria-valuenow="${progress.percentage}" 
+                             aria-valuemin="0" 
+                             aria-valuemax="100">
+                            ${progress.percentage}%
+                        </div>
+                    </div>
+                    <p class="mt-2 mb-0"><small class="text-muted">
+                        Etapa ${progress.current_step_number}/${progress.total_steps}: ${progress.current_step}
+                    </small></p>
+                </div>
             `;
         } else if (data.latest_backup) {
             const latest = data.latest_backup;
