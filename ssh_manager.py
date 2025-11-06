@@ -79,14 +79,23 @@ class SSHManager:
         validated_paths = []
         total_size = 0
 
+        # Exclusions for virtual filesystems and unnecessary directories
+        # These should be excluded especially when backing up root "/"
+        exclusions = [
+            '/proc', '/sys', '/dev', '/run', '/tmp',
+            '/mnt', '/media', '/lost+found', '/snap',
+            '*/cache/*', '*/Cache/*', '*/temp/*', '*/Temp/*'
+        ]
+
         for path in paths:
             if not self._is_safe_path(path):
                 raise ValueError(f"Invalid or unsafe path: {path}")
             validated_paths.append(shlex.quote(path))
 
-            # Estimate total size
+            # Estimate total size with same exclusions as tar will use
             try:
-                size_cmd = f"du -sb {shlex.quote(path)} | cut -f1"
+                exclude_du_str = ' '.join([f"--exclude={shlex.quote(e)}" for e in exclusions])
+                size_cmd = f"du -sb {exclude_du_str} {shlex.quote(path)} 2>/dev/null | cut -f1"
                 stdout_size, stderr_size, exit_status_size = self.execute_command(size_cmd)
                 if exit_status_size == 0:
                     size_str = stdout_size.strip()
@@ -108,14 +117,6 @@ class SSHManager:
         # Use faster compression for files >= 1GB
         if use_fast_compression is None:
             use_fast_compression = total_size >= 1073741824  # 1GB
-
-        # Exclusions for virtual filesystems and unnecessary directories
-        # These should be excluded especially when backing up root "/"
-        exclusions = [
-            '/proc', '/sys', '/dev', '/run', '/tmp',
-            '/mnt', '/media', '/lost+found', '/snap',
-            '*/cache/*', '*/Cache/*', '*/temp/*', '*/Temp/*'
-        ]
 
         exclude_str = ' '.join([f"--exclude={shlex.quote(e)}" for e in exclusions])
 
