@@ -78,3 +78,51 @@ class Encryptor:
                 final_decrypted = decryptor.finalize()
                 final_unpadded = unpadder.update(final_decrypted) + unpadder.finalize()
                 f_out.write(final_unpadded)
+
+    def start_encryption_stream(self, output_file: str):
+        """
+        Initialize streaming encryption to a file.
+        Call this before encrypt_chunk().
+        """
+        self.iv = os.urandom(16)
+        self.cipher = Cipher(
+            algorithms.AES(self.key),
+            modes.CBC(self.iv),
+            backend=default_backend()
+        )
+        self.encryptor = self.cipher.encryptor()
+        self.padder = padding.PKCS7(128).padder()
+        self.output_file_handle = open(output_file, 'wb')
+        self.output_file_handle.write(self.iv)
+
+    def encrypt_chunk(self, chunk: bytes):
+        """
+        Encrypt a chunk of data and write to the output file.
+        Must call start_encryption_stream() first.
+        """
+        if not hasattr(self, 'encryptor'):
+            raise Exception("Encryption stream not started. Call start_encryption_stream() first.")
+        
+        padded_chunk = self.padder.update(chunk)
+        encrypted_chunk = self.encryptor.update(padded_chunk)
+        self.output_file_handle.write(encrypted_chunk)
+
+    def finalize_encryption_stream(self):
+        """
+        Finalize the encryption stream and close the output file.
+        Call this after all chunks have been encrypted.
+        """
+        if not hasattr(self, 'encryptor'):
+            raise Exception("Encryption stream not started.")
+        
+        final_padded = self.padder.finalize()
+        final_encrypted = self.encryptor.update(final_padded) + self.encryptor.finalize()
+        self.output_file_handle.write(final_encrypted)
+        self.output_file_handle.close()
+        
+        # Clean up attributes
+        delattr(self, 'encryptor')
+        delattr(self, 'padder')
+        delattr(self, 'output_file_handle')
+        delattr(self, 'cipher')
+        delattr(self, 'iv')

@@ -229,3 +229,78 @@ class SSHManager:
             raise Exception(f"Error getting file size for {remote_path}: {str(e)}")
         finally:
             sftp.close()
+
+    def download_and_encrypt_streaming(self, remote_path: str, encrypted_local_path: str, 
+                                      encryptor, progress_callback=None) -> int:
+        """
+        Download a file from the remote server and encrypt it in streaming mode.
+        This avoids storing the unencrypted file locally.
+        
+        Args:
+            remote_path: Path to the file on the remote server
+            encrypted_local_path: Path where the encrypted file will be saved locally
+            encryptor: Encryptor instance to use for encryption
+            progress_callback: Optional callback function for progress updates
+            
+        Returns:
+            int: Size of the encrypted file in bytes
+        """
+        if not self.client:
+            raise Exception("Not connected to SSH server")
+
+        sftp = self.client.open_sftp()
+        chunk_size = 1024 * 1024  # 1MB chunks
+        total_downloaded = 0
+        
+        try:
+            # Get file size for progress tracking
+            file_stat = sftp.stat(remote_path)
+            file_size = file_stat.st_size
+            
+            if progress_callback:
+                progress_callback(f"Iniciando download de {self._format_bytes(file_size)}")
+            
+            # Open remote file for reading
+            with sftp.open(remote_path, 'rb') as remote_file:
+                # Start encryption streaming
+                encryptor.start_encryption_stream(encrypted_local_path)
+                
+                try:
+                    # Read and encrypt in chunks
+                    while True:
+                        chunk = remote_file.read(chunk_size)
+                        if not chunk:
+                            break
+                        
+                        encryptor.encrypt_chunk(chunk)
+                        total_downloaded += len(chunk)
+                        
+                        # Update progress every 10MB
+                        if progress_callback and total_downloaded % (10 * 1024 * 1024) == 0:
+                            percentage = (total_downloaded / file_size) * 100
+                            progress_callback(f"Baixado e criptografado: {self._format_bytes(total_downloaded)} ({percentage:.1f}%)")
+                    
+                    # Finalize encryption
+                    encryptor.finalize_encryption_stream()
+                    
+                    if progress_callback:
+                        progress_callback(f"Download e criptografia concluídos: {self._format_bytes(total_downloaded)}")
+                    
+                except Exception as e:
+                    # Clean up partial file on error
+                    if os.path.exists(encrypted_local_path):
+                        os.remove(encrypted_local_path)
+                    raise Exception(f"Error during streaming download/encryption: {str(e)}")
+            
+            # Get the size of the encrypted file
+            encrypted_size = os.path.getsize(encrypted_local_path)
+            return encrypted_size
+            
+        except FileNotFoundError:
+            raise FileNotFoundError(f"Remote file not found: {remote_path}")
+        except Exception as e:
+            if "streaming download/encryption" not in str(e):
+                raise Exception(f"Error in streaming download: {str(e)}")
+            raise
+        finally:
+            sftp.close()
