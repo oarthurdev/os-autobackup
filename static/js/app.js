@@ -7,17 +7,17 @@ document.addEventListener('DOMContentLoaded', function() {
     logsModal = new bootstrap.Modal(document.getElementById('logsModal'));
     hostModal = new bootstrap.Modal(document.getElementById('hostModal'));
     backupModal = new bootstrap.Modal(document.getElementById('backupModal'));
-    
+
     // Load theme preference
     loadTheme();
-    
+
     // Initialize chart
     initializeChart();
-    
+
     loadStatus();
     loadSSHHosts();
     loadBackups();
-    
+
     setInterval(loadStatus, 5000);
     setInterval(loadSSHHosts, 15000);
     setInterval(loadBackups, 10000);
@@ -35,7 +35,7 @@ function toggleTheme() {
     document.documentElement.setAttribute('data-theme', newTheme);
     localStorage.setItem('theme', newTheme);
     updateThemeIcon(newTheme);
-    
+
     // Update chart colors
     if (backupChart) {
         updateChartTheme(newTheme);
@@ -56,7 +56,7 @@ function initializeChart() {
     const theme = document.documentElement.getAttribute('data-theme');
     const textColor = theme === 'dark' ? '#eaeaea' : '#212529';
     const gridColor = theme === 'dark' ? '#2d3561' : '#dee2e6';
-    
+
     backupChart = new Chart(ctx, {
         type: 'line',
         data: {
@@ -106,7 +106,7 @@ function initializeChart() {
 function updateChartTheme(theme) {
     const textColor = theme === 'dark' ? '#eaeaea' : '#212529';
     const gridColor = theme === 'dark' ? '#2d3561' : '#dee2e6';
-    
+
     backupChart.options.plugins.legend.labels.color = textColor;
     backupChart.options.scales.y.ticks.color = textColor;
     backupChart.options.scales.y.grid.color = gridColor;
@@ -117,14 +117,14 @@ function updateChartTheme(theme) {
 
 function updateChart(backups) {
     const successBackups = backups.filter(b => b.status === 'SUCCESS' && b.file_size).slice(0, 10).reverse();
-    
+
     const labels = successBackups.map(b => {
         const date = new Date(b.timestamp);
         return date.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
     });
-    
+
     const data = successBackups.map(b => (b.file_size / (1024 * 1024)).toFixed(2));
-    
+
     backupChart.data.labels = labels;
     backupChart.data.datasets[0].data = data;
     backupChart.update();
@@ -135,11 +135,11 @@ function updateStatistics(backups) {
     const success = backups.filter(b => b.status === 'SUCCESS').length;
     const failed = backups.filter(b => b.status === 'FAILED').length;
     const totalSize = backups.reduce((sum, b) => sum + (b.file_size || 0), 0);
-    
+
     animateValue('totalBackups', 0, total, 1000);
     animateValue('successBackups', 0, success, 1000);
     animateValue('failedBackups', 0, failed, 1000);
-    
+
     const sizeGB = (totalSize / (1024 * 1024 * 1024)).toFixed(2);
     document.getElementById('totalSize').textContent = sizeGB + ' GB';
 }
@@ -149,7 +149,7 @@ function animateValue(id, start, end, duration) {
     const range = end - start;
     const increment = range / (duration / 16);
     let current = start;
-    
+
     const timer = setInterval(() => {
         current += increment;
         if ((increment > 0 && current >= end) || (increment < 0 && current <= end)) {
@@ -164,9 +164,9 @@ async function loadSSHHosts() {
     try {
         const response = await fetch('/api/ssh-hosts');
         const hosts = await response.json();
-        
+
         const tbody = document.getElementById('sshHostsTable');
-        
+
         if (hosts.length === 0) {
             tbody.innerHTML = `
                 <tr>
@@ -177,16 +177,16 @@ async function loadSSHHosts() {
             `;
             return;
         }
-        
+
         tbody.innerHTML = hosts.map(host => {
             const statusBadge = host.connection_status?.startsWith('SUCCESS') 
                 ? '<span class="badge bg-success">Conectado</span>' 
                 : host.connection_status?.startsWith('FAILED') 
                 ? '<span class="badge bg-danger">Falhou</span>' 
                 : '<span class="badge bg-secondary">Não testado</span>';
-            
+
             const authType = host.auth_type === 'password' ? 'Senha' : 'Chave SSH';
-            
+
             return `
                 <tr>
                     <td><strong>${host.name}</strong></td>
@@ -230,12 +230,12 @@ function showAddHostModal() {
 async function showEditHostModal(hostId) {
     currentHostId = hostId;
     document.getElementById('hostModalTitle').textContent = 'Editar Servidor SSH';
-    
+
     try {
         const response = await fetch(`/api/ssh-hosts`);
         const hosts = await response.json();
         const host = hosts.find(h => h.id === hostId);
-        
+
         if (host) {
             document.getElementById('hostId').value = host.id;
             document.getElementById('hostName').value = host.name;
@@ -246,7 +246,7 @@ async function showEditHostModal(hostId) {
             document.getElementById('hostBackupPaths').value = host.backup_paths;
             document.getElementById('hostPassword').value = '';
             document.getElementById('hostKeyPath').value = '';
-            
+
             toggleAuthFields();
             hostModal.show();
         }
@@ -266,12 +266,12 @@ async function saveHost() {
     const password = document.getElementById('hostPassword').value;
     const keyPath = document.getElementById('hostKeyPath').value.trim();
     const backupPaths = document.getElementById('hostBackupPaths').value.trim();
-    
+
     if (!name || !host || !username || !backupPaths) {
         alert('Por favor, preencha todos os campos obrigatórios');
         return;
     }
-    
+
     const data = {
         name,
         host,
@@ -282,7 +282,7 @@ async function saveHost() {
         key_path: keyPath,
         backup_paths: backupPaths
     };
-    
+
     try {
         let response;
         if (hostId) {
@@ -302,9 +302,9 @@ async function saveHost() {
                 body: JSON.stringify(data)
             });
         }
-        
+
         const result = await response.json();
-        
+
         if (result.success) {
             alert(result.message);
             hostModal.hide();
@@ -322,14 +322,14 @@ async function deleteHost(hostId) {
     if (!confirm('Tem certeza que deseja excluir este servidor?')) {
         return;
     }
-    
+
     try {
         const response = await fetch(`/api/ssh-hosts/${hostId}`, {
             method: 'DELETE'
         });
-        
+
         const result = await response.json();
-        
+
         if (result.success) {
             alert(result.message);
             loadSSHHosts();
@@ -347,20 +347,20 @@ async function testConnection(hostId) {
     const originalContent = btn.innerHTML;
     btn.disabled = true;
     btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
-    
+
     try {
         const response = await fetch(`/api/ssh-hosts/${hostId}/test`, {
             method: 'POST'
         });
-        
+
         const result = await response.json();
-        
+
         if (result.success) {
             alert('✓ ' + result.message);
         } else {
             alert('✗ ' + result.message);
         }
-        
+
         loadSSHHosts();
     } catch (error) {
         console.error('Error testing connection:', error);
@@ -375,7 +375,7 @@ function toggleAuthFields() {
     const authType = document.getElementById('hostAuthType').value;
     const passwordField = document.getElementById('passwordField');
     const keyPathField = document.getElementById('keyPathField');
-    
+
     if (authType === 'password') {
         passwordField.classList.remove('d-none');
         keyPathField.classList.add('d-none');
@@ -389,19 +389,19 @@ async function showBackupModal() {
     try {
         const response = await fetch('/api/ssh-hosts');
         const hosts = await response.json();
-        
+
         const select = document.getElementById('backupHostSelect');
-        
+
         if (hosts.length === 0) {
             select.innerHTML = '<option value="">Nenhum servidor cadastrado</option>';
             alert('Você precisa cadastrar um servidor SSH primeiro');
             return;
         }
-        
+
         select.innerHTML = hosts.map(host => 
             `<option value="${host.id}">${host.name} (${host.host})</option>`
         ).join('');
-        
+
         backupModal.show();
     } catch (error) {
         console.error('Error loading hosts for backup:', error);
@@ -411,16 +411,16 @@ async function showBackupModal() {
 
 async function startBackupWithHost() {
     const hostId = document.getElementById('backupHostSelect').value;
-    
+
     if (!hostId) {
         alert('Por favor, selecione um servidor');
         return;
     }
-    
+
     if (!confirm('Deseja iniciar um backup agora para o servidor selecionado?')) {
         return;
     }
-    
+
     try {
         const response = await fetch('/api/backup/start', {
             method: 'POST',
@@ -429,9 +429,9 @@ async function startBackupWithHost() {
             },
             body: JSON.stringify({ host_id: parseInt(hostId) })
         });
-        
+
         const data = await response.json();
-        
+
         if (data.success) {
             alert('Backup iniciado com sucesso!');
             backupModal.hide();
@@ -450,14 +450,14 @@ async function loadStatus() {
     try {
         const response = await fetch('/api/backup/status');
         const data = await response.json();
-        
+
         const statusDiv = document.getElementById('currentStatus');
         const progressSection = document.getElementById('progressSection');
         const progressContent = document.getElementById('progressContent');
-        
+
         if (data.in_progress && data.progress) {
             const progress = data.progress;
-            
+
             // Show progress section
             progressSection.style.display = 'block';
             progressContent.innerHTML = `
@@ -481,7 +481,7 @@ async function loadStatus() {
                     <i class="fas fa-info-circle"></i> <strong>${progress.current_step}</strong>
                 </div>
             `;
-            
+
             statusDiv.innerHTML = `
                 <div class="text-center">
                     <div class="spinner-border text-primary mb-3" role="status" style="width: 3rem; height: 3rem;">
@@ -493,7 +493,7 @@ async function loadStatus() {
             `;
         } else {
             progressSection.style.display = 'none';
-            
+
             if (data.latest_backup) {
                 const latest = data.latest_backup;
                 const statusClass = latest.status === 'SUCCESS' ? 'status-success' : 
@@ -502,35 +502,38 @@ async function loadStatus() {
                                   latest.status === 'FAILED' ? 'Falhou' : 'Em Progresso';
                 const statusIcon = latest.status === 'SUCCESS' ? 'fa-check-circle' :
                                   latest.status === 'FAILED' ? 'fa-times-circle' : 'fa-spinner fa-spin';
-                
+
+                const iconColor = latest.status === 'SUCCESS' ? 'text-success' :
+                              latest.status === 'FAILED' ? 'text-danger' : 'text-warning';
+
                 statusDiv.innerHTML = `
                     <div class="mb-3 pb-3 border-bottom">
                         <div class="d-flex align-items-center mb-2">
-                            <i class="fas ${statusIcon} me-2" style="font-size: 1.5rem;"></i>
+                            <i class="fas ${statusIcon} ${iconColor} me-2" style="font-size: 1.5rem;"></i>
                             <h6 class="mb-0">Último Backup</h6>
                         </div>
                         <span class="badge ${statusClass}">${statusText}</span>
                     </div>
                     <div class="info-list">
                         <div class="info-item">
-                            <i class="fas fa-calendar text-muted"></i>
+                            <i class="fas fa-calendar text-primary"></i>
                             <span>${formatDate(latest.timestamp)}</span>
                         </div>
                         ${latest.file_name ? `
                         <div class="info-item">
-                            <i class="fas fa-file text-muted"></i>
+                            <i class="fas fa-file text-info"></i>
                             <span>${latest.file_name}</span>
                         </div>
                         ` : ''}
                         ${latest.file_size ? `
                         <div class="info-item">
-                            <i class="fas fa-hdd text-muted"></i>
+                            <i class="fas fa-hdd text-success"></i>
                             <span>${formatBytes(latest.file_size)}</span>
                         </div>
                         ` : ''}
                         ${latest.duration_seconds ? `
                         <div class="info-item">
-                            <i class="fas fa-clock text-muted"></i>
+                            <i class="fas fa-clock text-warning"></i>
                             <span>${latest.duration_seconds.toFixed(2)}s</span>
                         </div>
                         ` : ''}
@@ -560,13 +563,13 @@ async function loadBackups() {
         const response = await fetch('/api/backups?limit=50');
         const backups = await response.json();
         allBackups = backups;
-        
+
         // Update statistics and chart
         updateStatistics(backups);
         updateChart(backups);
-        
+
         const tbody = document.getElementById('backupsTable');
-        
+
         if (backups.length === 0) {
             tbody.innerHTML = `
                 <tr>
@@ -578,16 +581,16 @@ async function loadBackups() {
             `;
             return;
         }
-        
+
         tbody.innerHTML = backups.map(backup => {
             const statusClass = backup.status === 'SUCCESS' ? 'status-success' : 
                                backup.status === 'FAILED' ? 'status-failed' : 'status-in-progress';
             const statusText = backup.status === 'SUCCESS' ? 'Sucesso' :
                               backup.status === 'FAILED' ? 'Falhou' : 'Em Progresso';
-            
+
             window.backupData = window.backupData || {};
             window.backupData[backup.id] = backup;
-            
+
             return `
                 <tr>
                     <td>${backup.id}</td>
@@ -623,9 +626,9 @@ async function viewLogs(backupId) {
     try {
         const response = await fetch(`/api/backup/${backupId}/logs`);
         const logs = await response.json();
-        
+
         const logsContent = document.getElementById('logsContent');
-        
+
         if (logs.length === 0) {
             logsContent.innerHTML = '<p class="text-muted">Nenhum log encontrado.</p>';
         } else {
@@ -639,7 +642,7 @@ async function viewLogs(backupId) {
                 `;
             }).join('');
         }
-        
+
         logsModal.show();
     } catch (error) {
         console.error('Error loading logs:', error);
@@ -651,22 +654,22 @@ async function restoreBackup(backupId) {
     if (!confirm('Deseja restaurar (descriptografar) este backup? O arquivo .tar.gz será baixado para seu computador.')) {
         return;
     }
-    
+
     const btn = event.target.closest('button');
     const originalContent = btn.innerHTML;
     btn.disabled = true;
     btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Restaurando...';
-    
+
     try {
         const response = await fetch(`/api/backup/${backupId}/restore`, {
             method: 'POST'
         });
-        
+
         const result = await response.json();
-        
+
         if (result.success) {
             alert('✓ Backup descriptografado com sucesso!');
-            
+
             // Fazer download automático
             window.location.href = result.download_path;
         } else {
@@ -690,10 +693,10 @@ function formatDate(dateStr) {
 function formatBytes(bytes) {
     if (!bytes) return 'N/A';
     if (bytes === 0) return '0 Bytes';
-    
+
     const k = 1024;
     const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
     const i = Math.floor(Math.log(bytes) / Math.log(k));
-    
+
     return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i];
 }
