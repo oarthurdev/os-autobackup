@@ -76,27 +76,20 @@ class BackupEngine:
                 # Estimativa base do tempo restante
                 base_estimate = time_per_weight_unit * remaining_weight
                 
-                # Ajuste baseado no tamanho do arquivo e etapas mais pesadas
+                # Ajuste fino baseado no tamanho do arquivo (mais conservador)
                 if self.progress.get('estimated_file_size'):
                     size_mb = self.progress['estimated_file_size']
                     
-                    # Calcular fator de complexidade baseado no tamanho
-                    if size_mb > 5000:  # > 5GB
-                        complexity_factor = 2.5
-                    elif size_mb > 3000:  # > 3GB
-                        complexity_factor = 2.0
-                    elif size_mb > 1000:  # > 1GB
-                        complexity_factor = 1.5
-                    else:
-                        complexity_factor = 1.0
-                    
-                    # Aplicar fator de complexidade nas etapas pesadas
-                    if step_number <= 3:  # Ainda não completou compressão
-                        base_estimate *= complexity_factor
-                    elif step_number <= 4:  # Ainda não completou download/encrypt
-                        base_estimate *= (complexity_factor * 0.8)
-                    elif step_number <= 6:  # Ainda não completou upload
-                        base_estimate *= (complexity_factor * 0.5)
+                    # Fator de ajuste mais realista baseado no tamanho
+                    # Apenas para arquivos muito grandes e apenas nas etapas pesadas
+                    if size_mb > 3000 and step_number <= 4:  # > 3GB e ainda nas etapas pesadas
+                        # Pequeno ajuste incremental (máximo 30% extra)
+                        size_factor = min(1 + (size_mb / 10000), 1.3)
+                        base_estimate *= size_factor
+                    elif size_mb > 1000 and step_number <= 4:  # > 1GB
+                        # Ajuste menor (máximo 15% extra)
+                        size_factor = min(1 + (size_mb / 20000), 1.15)
+                        base_estimate *= size_factor
                 
                 self.progress['estimated_time_remaining'] = int(base_estimate)
             else:
