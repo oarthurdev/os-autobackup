@@ -762,7 +762,7 @@ async function loadBackups() {
                             </a>
                         ` : ''}
                         ${backup.status === 'SUCCESS' && backup.drive_file_id ? `
-                            <button class="btn btn-sm btn-warning" onclick="restoreBackup(${backup.id})" title="Restaurar (Descriptografar)">
+                            <button class="btn btn-sm btn-warning" onclick="restoreBackup(${backup.id}, event)" title="Restaurar (Descriptografar)">
                                 <i class="fas fa-unlock"></i> Restaurar
                             </button>
                         ` : ''}
@@ -803,7 +803,7 @@ async function viewLogs(backupId) {
     }
 }
 
-async function restoreBackup(backupId) {
+async function restoreBackup(backupId, event) {
     const confirmed = await showConfirm(
         'Restaurar Backup',
         'Deseja restaurar (descriptografar) este backup? O arquivo .tar.gz será baixado para seu computador.'
@@ -811,10 +811,17 @@ async function restoreBackup(backupId) {
 
     if (!confirmed) return;
 
-    const btn = event.target.closest('button');
-    const originalContent = btn.innerHTML;
-    btn.disabled = true;
-    btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Restaurando...';
+    let btn = null;
+    let originalContent = '';
+    
+    if (event && event.target) {
+        btn = event.target.closest('button');
+        if (btn) {
+            originalContent = btn.innerHTML;
+            btn.disabled = true;
+            btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Restaurando...';
+        }
+    }
 
     try {
         const response = await fetch(`/api/backup/${backupId}/restore`, {
@@ -834,8 +841,10 @@ async function restoreBackup(backupId) {
         console.error('Error restoring backup:', error);
         showError('Erro ao restaurar backup');
     } finally {
-        btn.disabled = false;
-        btn.innerHTML = originalContent;
+        if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = originalContent;
+        }
     }
 }
 
