@@ -294,8 +294,11 @@
                             <label for="hostBackupPaths" class="form-label">
                                 <i class="fas fa-folder"></i> Caminhos para Backup *
                             </label>
-                            <input type="text" class="form-control modern-input" id="hostBackupPaths" value="/home" required>
-                            <small class="text-muted">Caminhos separados por vírgula (ex: /home,/etc,/var/www)</small>
+                            <input type="text" class="form-control modern-input" id="hostBackupPaths" placeholder="/home/seu-usuario,/var/www" required>
+                            <small class="text-muted">
+                                <strong>Importante:</strong> Use caminhos que seu usuário SSH tenha permissão de leitura.<br>
+                                Exemplo: /home/usuario, /var/www, /opt/app (separados por vírgula)
+                            </small>
                         </div>
                     </form>
                 </div>

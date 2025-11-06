@@ -13,6 +13,7 @@ class SSHManager:
         self.password = password or Config.VPS_PASSWORD
         self.key_path = key_path or Config.VPS_KEY_PATH
         self.client = None
+        self.logger = None # Assume self.logger is initialized elsewhere
 
     def connect(self) -> bool:
         try:
@@ -46,7 +47,19 @@ class SSHManager:
 
             return True
         except Exception as e:
-            raise Exception(f"SSH connection failed: {str(e)}")
+            error_msg = f"Falha na conexão SSH: {str(e)}"
+            if "Name or service not known" in str(e):
+                error_msg = f"Falha na conexão: Host '{self.host}' não encontrado. Verifique o endereço IP/hostname."
+            elif "Authentication failed" in str(e):
+                error_msg = "Falha na autenticação. Verifique usuário e senha/chave SSH."
+            elif "No such file or directory" in str(e):
+                error_msg = f"Caminho não encontrado no servidor: {str(e)}"
+
+            if self.logger: # Check if logger is initialized
+                self.logger.error(error_msg)
+            if self.client:
+                self.client.close()
+            raise Exception(error_msg)
 
     def disconnect(self):
         if self.client:
@@ -74,15 +87,22 @@ class SSHManager:
             # Estimate total size
             try:
                 size_cmd = f"du -sb {shlex.quote(path)} | cut -f1"
-                _, stdout, _ = self.execute_command(size_cmd)
-                size_str = stdout.read().decode().strip()
-                if size_str.isdigit():
-                    total_size += int(size_str)
-            except:
-                pass
+                stdout_size, stderr_size, exit_status_size = self.execute_command(size_cmd)
+                if exit_status_size == 0:
+                    size_str = stdout_size.strip()
+                    if size_str.isdigit():
+                        total_size += int(size_str)
+                else:
+                    # If 'du' fails for a path, we might still want to proceed but log the issue
+                    if self.logger:
+                        self.logger.warning(f"Could not get size for path '{path}': {stderr_size}")
+            except Exception as e:
+                if self.logger:
+                    self.logger.warning(f"Error estimating size for path '{path}': {e}")
+                # Continue even if size estimation fails for one path
 
         paths_str = ' '.join(validated_paths)
-        remote_temp_dir = '/tmp'
+        remote_temp_dir = '/tmp' # Default temporary directory
         remote_archive_path = f"{remote_temp_dir}/{archive_name}"
 
         # Use faster compression for files >= 1GB
@@ -101,25 +121,51 @@ class SSHManager:
         stdout, stderr, exit_status = self.execute_command(tar_command)
 
         if exit_status != 0:
-            raise Exception(f"Failed to create archive: {stderr}")
+            # Attempt to provide a more specific error if the path itself was the issue
+            if "No such file or directory" in stderr:
+                raise Exception(f"Failed to create archive: One or more specified paths do not exist on the server. Details: {stderr}")
+            else:
+                raise Exception(f"Failed to create archive: {stderr}")
 
         # Verificar o tamanho do arquivo criado
         if progress_callback:
-            stat_command = f"stat -c%s {archive_path} 2>/dev/null"
-            stdout, _, _ = self.execute_command(stat_command)
-            try:
-                archive_size = int(stdout.strip())
-                progress_callback(f"Arquivo compactado criado: {self._format_bytes(archive_size)}")
-            except:
-                pass
+            # Correctly quote the remote_archive_path for the stat command
+            stat_command = f"stat -c%s {shlex.quote(remote_archive_path)} 2>/dev/null"
+            stdout_stat, _, exit_status_stat = self.execute_command(stat_command)
+            if exit_status_stat == 0:
+                try:
+                    archive_size = int(stdout_stat.strip())
+                    progress_callback(f"Arquivo compactado criado: {self._format_bytes(archive_size)}")
+                except ValueError:
+                    if self.logger:
+                        self.logger.warning(f"Could not parse archive size: '{stdout_stat.strip()}'")
+            else:
+                if self.logger:
+                    self.logger.warning(f"Could not get archive size for '{remote_archive_path}'.")
 
-        return archive_path
+
+        return remote_archive_path # Return the full path where the archive was created
 
     def _is_safe_path(self, path: str) -> bool:
-        return not (not path.strip() or '..' in path or path.startswith('-'))
+        # More robust check: disallow empty paths, paths with '..', and paths starting with '-'
+        # Also ensure paths don't contain problematic characters that shlex.quote might miss
+        # and check for absolute paths that might be unintended.
+        cleaned_path = path.strip()
+        if not cleaned_path:
+            return False
+        if '..' in cleaned_path:
+            return False
+        if cleaned_path.startswith('-'):
+            return False
+        # Optionally, disallow absolute paths if they are not intended for backups and should be relative to user's home
+        # if cleaned_path.startswith('/'):
+        #     return False
+        return True
 
     def _format_bytes(self, bytes_size: int) -> str:
         """Formata bytes para formato legível"""
+        if bytes_size < 0:
+            return "Invalid size"
         for unit in ['B', 'KB', 'MB', 'GB', 'TB']:
             if bytes_size < 1024.0:
                 return f"{bytes_size:.2f} {unit}"
@@ -133,6 +179,10 @@ class SSHManager:
         sftp = self.client.open_sftp()
         try:
             sftp.get(remote_path, local_path)
+        except FileNotFoundError:
+            raise FileNotFoundError(f"Remote file not found: {remote_path}")
+        except Exception as e:
+            raise Exception(f"Error downloading file {remote_path} to {local_path}: {str(e)}")
         finally:
             sftp.close()
 
@@ -143,6 +193,10 @@ class SSHManager:
         sftp = self.client.open_sftp()
         try:
             sftp.remove(remote_path)
+        except FileNotFoundError:
+            raise FileNotFoundError(f"Remote file not found: {remote_path}")
+        except Exception as e:
+            raise Exception(f"Error removing remote file {remote_path}: {str(e)}")
         finally:
             sftp.close()
 
@@ -154,5 +208,9 @@ class SSHManager:
         try:
             stat = sftp.stat(remote_path)
             return stat.st_size
+        except FileNotFoundError:
+            raise FileNotFoundError(f"Remote file not found: {remote_path}")
+        except Exception as e:
+            raise Exception(f"Error getting file size for {remote_path}: {str(e)}")
         finally:
             sftp.close()

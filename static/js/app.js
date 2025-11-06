@@ -222,6 +222,7 @@ function showAddHostModal() {
     document.getElementById('hostId').value = '';
     document.getElementById('hostPort').value = '22';
     document.getElementById('hostAuthType').value = 'password';
+    document.getElementById('hostBackupPaths').value = '';
     toggleAuthFields();
     hostModal.show();
 }
