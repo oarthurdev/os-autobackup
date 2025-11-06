@@ -20,7 +20,9 @@ class BackupEngine:
             'current_step': '',
             'percentage': 0,
             'total_steps': 7,
-            'current_step_number': 0
+            'current_step_number': 0,
+            'start_time': None,
+            'estimated_time_remaining': None
         }
         
         os.makedirs(Config.TEMP_DIR, exist_ok=True)
@@ -30,6 +32,14 @@ class BackupEngine:
         self.progress['current_step'] = step_name
         self.progress['percentage'] = int((step_number / self.progress['total_steps']) * 100)
         self.progress['status'] = 'in_progress'
+        
+        # Calculate estimated time remaining
+        if self.progress['start_time'] and step_number > 0:
+            elapsed_time = time.time() - self.progress['start_time']
+            steps_remaining = self.progress['total_steps'] - step_number
+            avg_time_per_step = elapsed_time / step_number
+            estimated_remaining = avg_time_per_step * steps_remaining
+            self.progress['estimated_time_remaining'] = int(estimated_remaining)
     
     def reset_progress(self):
         self.progress = {
@@ -37,7 +47,9 @@ class BackupEngine:
             'current_step': '',
             'percentage': 0,
             'total_steps': 7,
-            'current_step_number': 0
+            'current_step_number': 0,
+            'start_time': None,
+            'estimated_time_remaining': None
         }
     
     def get_progress(self):
@@ -48,6 +60,7 @@ class BackupEngine:
         start_time_str = start_time.isoformat()
         
         self.reset_progress()
+        self.progress['start_time'] = time.time()
         self.update_progress(1, 'Iniciando backup...')
         
         backup_id = self.db.create_backup_record(start_time_str)

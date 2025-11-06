@@ -606,6 +606,12 @@ async function loadStatus() {
 
             // Show progress section
             progressSection.style.display = 'block';
+            const timeRemainingHTML = progress.estimated_time_remaining 
+                ? `<div class="alert alert-warning mb-2">
+                       <i class="fas fa-clock"></i> <strong>Tempo estimado restante:</strong> ${formatTime(progress.estimated_time_remaining)}
+                   </div>`
+                : '';
+            
             progressContent.innerHTML = `
                 <div class="d-flex justify-content-between mb-3">
                     <h6 class="mb-0">
@@ -623,6 +629,7 @@ async function loadStatus() {
                         ${progress.percentage}%
                     </div>
                 </div>
+                ${timeRemainingHTML}
                 <div class="alert alert-info mb-0">
                     <i class="fas fa-info-circle"></i> <strong>${progress.current_step}</strong>
                 </div>
@@ -847,4 +854,20 @@ function formatBytes(bytes) {
     const i = Math.floor(Math.log(bytes) / Math.log(k));
 
     return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i];
+}
+
+function formatTime(seconds) {
+    if (!seconds || seconds < 0) return 'Calculando...';
+    
+    const hours = Math.floor(seconds / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+    const secs = Math.floor(seconds % 60);
+    
+    if (hours > 0) {
+        return `${hours}h ${minutes}m ${secs}s`;
+    } else if (minutes > 0) {
+        return `${minutes}m ${secs}s`;
+    } else {
+        return `${secs}s`;
+    }
 }
