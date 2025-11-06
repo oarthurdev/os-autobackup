@@ -109,11 +109,14 @@ class SSHManager:
         if use_fast_compression is None:
             use_fast_compression = total_size >= 1073741824  # 1GB
 
-        # --fast uses gzip level 1 (faster, slightly larger files)
+        # Use gzip level 1 (faster, slightly larger files) for large files
         # For very large files, speed is more important than size
-        compression_flag = "--fast" if use_fast_compression else ""
-
-        tar_command = f"tar {compression_flag} -czf {shlex.quote(remote_archive_path)} {paths_str}"
+        if use_fast_compression:
+            # Use gzip with compression level 1 via -I option
+            tar_command = f"tar -I 'gzip -1' -cf {shlex.quote(remote_archive_path)} {paths_str}"
+        else:
+            # Use default gzip compression (level 6)
+            tar_command = f"tar -czf {shlex.quote(remote_archive_path)} {paths_str}"
 
         if progress_callback and total_size >= 1073741824:
             progress_callback(f"Tamanho estimado: {total_size / (1024*1024):.2f} MB - usando compressão rápida")
