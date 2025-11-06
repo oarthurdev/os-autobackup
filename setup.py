@@ -7,12 +7,12 @@ with open("README.md", "r", encoding="utf-8") as fh:
 setup(
     name="os-backup-cli",
     version="1.0.0",
-    author="Your Name",
-    author_email="your.email@example.com",
-    description="A comprehensive backup solution for Ubuntu VPS servers",
+    author="Arthur Wagenknecht",
+    author_email="contato@oarthur.dev",
+    description="A comprehensive backup solution for Linux based VPS servers",
     long_description=long_description,
     long_description_content_type="text/markdown",
-    url="https://github.com/yourusername/os-backup",
+    url="https://github.com/oarthurdev/os-autobackup",
     packages=find_packages(),
     classifiers=[
         "Development Status :: 4 - Beta",
