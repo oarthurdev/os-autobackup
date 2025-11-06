@@ -59,7 +59,7 @@ class BackupEngine:
         if estimated_size_mb:
             self.progress['estimated_file_size'] = estimated_size_mb
         
-        # Calculate estimated time remaining (método melhorado)
+        # Calcular tempo estimado total restante (englobando todas as etapas)
         if self.progress['start_time'] and step_number > 1:
             elapsed_time = time.time() - self.progress['start_time']
             
@@ -69,28 +69,38 @@ class BackupEngine:
             # Peso restante
             remaining_weight = self.total_weight - completed_weight
             
-            # Tempo médio por unidade de peso
-            time_per_weight_unit = elapsed_time / completed_weight if completed_weight > 0 else 0
-            
-            # Estimativa base
-            base_estimate = time_per_weight_unit * remaining_weight
-            
-            # Ajuste baseado no tamanho do arquivo (se conhecido)
-            if self.progress.get('estimated_file_size'):
-                size_mb = self.progress['estimated_file_size']
+            if completed_weight > 0:
+                # Tempo médio por unidade de peso já processada
+                time_per_weight_unit = elapsed_time / completed_weight
                 
-                # Para arquivos grandes, aumentar estimativa das etapas pesadas
-                if size_mb > 1000:  # > 1GB
-                    # Fator de ajuste baseado no tamanho
-                    size_factor = min(size_mb / 1000, 10)  # Máximo 10x
+                # Estimativa base do tempo restante
+                base_estimate = time_per_weight_unit * remaining_weight
+                
+                # Ajuste baseado no tamanho do arquivo e etapas mais pesadas
+                if self.progress.get('estimated_file_size'):
+                    size_mb = self.progress['estimated_file_size']
                     
-                    # Se ainda não passou da etapa 3 (compressão) ou 4 (download/encrypt)
-                    if step_number < 4:
-                        base_estimate *= size_factor
-                    elif step_number < 6:
-                        base_estimate *= (size_factor * 0.7)
-            
-            self.progress['estimated_time_remaining'] = int(base_estimate)
+                    # Calcular fator de complexidade baseado no tamanho
+                    if size_mb > 5000:  # > 5GB
+                        complexity_factor = 2.5
+                    elif size_mb > 3000:  # > 3GB
+                        complexity_factor = 2.0
+                    elif size_mb > 1000:  # > 1GB
+                        complexity_factor = 1.5
+                    else:
+                        complexity_factor = 1.0
+                    
+                    # Aplicar fator de complexidade nas etapas pesadas
+                    if step_number <= 3:  # Ainda não completou compressão
+                        base_estimate *= complexity_factor
+                    elif step_number <= 4:  # Ainda não completou download/encrypt
+                        base_estimate *= (complexity_factor * 0.8)
+                    elif step_number <= 6:  # Ainda não completou upload
+                        base_estimate *= (complexity_factor * 0.5)
+                
+                self.progress['estimated_time_remaining'] = int(base_estimate)
+            else:
+                self.progress['estimated_time_remaining'] = None
     
     def reset_progress(self):
         self.progress = {
