@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import click
+import os
 from backup_engine import BackupEngine
 from database import Database
 from encryption import Encryptor
@@ -113,6 +114,32 @@ def genkey():
     click.echo("\nGenerated Encryption Key:")
     click.echo(key)
     click.echo("\nAdd this to your .env file as ENCRYPTION_KEY")
+
+@cli.command()
+@click.argument('encrypted_file', type=click.Path(exists=True))
+@click.argument('output_file', type=click.Path())
+def restore(encrypted_file, output_file):
+    """Restore (decrypt) a backup file
+    
+    Example: python cli.py restore backup_20241106.encrypted backup_restored.tar.gz
+    """
+    try:
+        encryptor = Encryptor()
+        
+        click.echo(f"Decrypting {encrypted_file}...")
+        encryptor.decrypt_file(encrypted_file, output_file)
+        
+        file_size = os.path.getsize(output_file)
+        click.echo(f"\n✓ Backup restored successfully!")
+        click.echo(f"  Output file: {output_file}")
+        click.echo(f"  Size: {file_size:,} bytes")
+        click.echo(f"\nTo extract: tar -xzf {output_file}")
+        
+    except Exception as e:
+        click.echo(f"\n✗ Restore failed!")
+        click.echo(f"  Error: {str(e)}")
+        if os.path.exists(output_file):
+            os.remove(output_file)
 
 @cli.command()
 def hosts():

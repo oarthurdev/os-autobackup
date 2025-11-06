@@ -132,6 +132,25 @@ Command-line tool for:
 - Checking logs
 - Monitoring status
 - Generating encryption keys
+- **Restoring (decrypting) backups**
+
+### Restoring Backups
+
+To restore an encrypted backup via CLI:
+
+```bash
+# Download the .encrypted file from Google Drive first, then:
+python cli.py restore backup_20241106_120000.encrypted backup_restored.tar.gz
+
+# Extract the restored backup:
+tar -xzf backup_restored.tar.gz
+```
+
+Via Web Interface:
+1. Go to "Histórico de Backups" (Backup History)
+2. Click the **"Restaurar"** (Restore) button next to a successful backup
+3. The decrypted `.tar.gz` file will be downloaded to your computer
+4. Extract it using your preferred archive tool
 
 ## Security Notes
 

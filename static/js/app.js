@@ -359,6 +359,9 @@ async function loadBackups() {
             const statusText = backup.status === 'SUCCESS' ? 'Sucesso' :
                               backup.status === 'FAILED' ? 'Falhou' : 'Em Progresso';
             
+            window.backupData = window.backupData || {};
+            window.backupData[backup.id] = backup;
+            
             return `
                 <tr>
                     <td>${backup.id}</td>
@@ -375,6 +378,11 @@ async function loadBackups() {
                             <a href="${backup.download_link}" target="_blank" class="btn btn-sm btn-success">
                                 <i class="fas fa-download"></i> Download
                             </a>
+                        ` : ''}
+                        ${backup.status === 'SUCCESS' && backup.drive_file_id ? `
+                            <button class="btn btn-sm btn-warning" onclick="restoreBackup(${backup.id})" title="Restaurar (Descriptografar)">
+                                <i class="fas fa-unlock"></i> Restaurar
+                            </button>
                         ` : ''}
                     </td>
                 </tr>
@@ -410,6 +418,40 @@ async function viewLogs(backupId) {
     } catch (error) {
         console.error('Error loading logs:', error);
         alert('Erro ao carregar logs');
+    }
+}
+
+async function restoreBackup(backupId) {
+    if (!confirm('Deseja restaurar (descriptografar) este backup? O arquivo .tar.gz será baixado para seu computador.')) {
+        return;
+    }
+    
+    const btn = event.target.closest('button');
+    const originalContent = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Restaurando...';
+    
+    try {
+        const response = await fetch(`/api/backup/${backupId}/restore`, {
+            method: 'POST'
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            alert('✓ Backup descriptografado com sucesso!');
+            
+            // Fazer download automático
+            window.location.href = result.download_path;
+        } else {
+            alert('✗ Erro ao restaurar backup: ' + result.error);
+        }
+    } catch (error) {
+        console.error('Error restoring backup:', error);
+        alert('Erro ao restaurar backup');
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = originalContent;
     }
 }
 

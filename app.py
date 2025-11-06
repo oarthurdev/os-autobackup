@@ -130,5 +130,65 @@ def test_ssh_host(host_id):
     result = ssh_host_manager.test_connection(host_id)
     return jsonify(result)
 
+@app.route('/api/backup/<int:backup_id>/restore', methods=['POST'])
+def restore_backup(backup_id):
+    try:
+        from encryption import Encryptor
+        from config import Config
+        import os
+        
+        # Buscar informações do backup
+        backups = db.get_all_backups(limit=1000)
+        backup = next((b for b in backups if b['id'] == backup_id), None)
+        
+        if not backup:
+            return jsonify({'success': False, 'error': 'Backup não encontrado'}), 404
+        
+        if not backup.get('drive_file_id'):
+            return jsonify({'success': False, 'error': 'Arquivo não disponível no Google Drive'}), 400
+        
+        # Download do arquivo criptografado do Google Drive
+        drive_manager = GoogleDriveManager()
+        encrypted_file = os.path.join(Config.TEMP_DIR, f"restore_{backup['file_name']}")
+        
+        # Baixar arquivo
+        from googleapiclient.http import MediaIoBaseDownload
+        import io
+        
+        request = drive_manager.service.files().get_media(fileId=backup['drive_file_id'])
+        fh = io.FileIO(encrypted_file, 'wb')
+        downloader = MediaIoBaseDownload(fh, request)
+        
+        done = False
+        while not done:
+            status, done = downloader.next_chunk()
+        
+        # Descriptografar
+        decrypted_file = encrypted_file.replace('.encrypted', '.tar.gz')
+        encryptor = Encryptor()
+        encryptor.decrypt_file(encrypted_file, decrypted_file)
+        
+        # Remover arquivo criptografado temporário
+        os.remove(encrypted_file)
+        
+        # Retornar caminho do arquivo descriptografado
+        download_path = f"/download/{os.path.basename(decrypted_file)}"
+        
+        return jsonify({
+            'success': True,
+            'message': 'Backup restaurado com sucesso',
+            'download_path': download_path,
+            'file_name': os.path.basename(decrypted_file)
+        })
+        
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/download/<filename>')
+def download_file(filename):
+    from flask import send_from_directory
+    from config import Config
+    return send_from_directory(Config.TEMP_DIR, filename, as_attachment=True)
+
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=False)
