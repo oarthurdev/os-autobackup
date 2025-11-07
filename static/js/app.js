@@ -831,9 +831,17 @@ async function restoreBackup(backupId, event) {
         const result = await response.json();
 
         if (result.success) {
-            showSuccess('Backup descriptografado com sucesso!');
-            // Fazer download automático
-            window.location.href = result.download_path;
+            showSuccess('Backup descriptografado! Iniciando download...');
+            
+            // Fazer download automático usando um link temporário
+            const downloadLink = document.createElement('a');
+            downloadLink.href = result.download_path;
+            downloadLink.download = result.file_name;
+            document.body.appendChild(downloadLink);
+            downloadLink.click();
+            document.body.removeChild(downloadLink);
+            
+            showInfo('Se o download não iniciar automaticamente, <a href="' + result.download_path + '">clique aqui</a>', 8000);
         } else {
             showError('Erro ao restaurar backup: ' + result.error);
         }

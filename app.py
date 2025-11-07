@@ -165,8 +165,14 @@ def restore_backup(backup_id):
         while not done:
             status, done = downloader.next_chunk()
         
+        # Fechar o arquivo
+        fh.close()
+        
         # Descriptografar
-        decrypted_file = encrypted_file.replace('.encrypted', '.tar.gz')
+        decrypted_file = encrypted_file.replace('.encrypted', '')
+        if not decrypted_file.endswith('.tar.gz'):
+            decrypted_file = decrypted_file.replace('restore_backup_', 'backup_')
+        
         encryptor = Encryptor()
         encryptor.decrypt_file(encrypted_file, decrypted_file)
         
@@ -190,7 +196,20 @@ def restore_backup(backup_id):
 def download_file(filename):
     from flask import send_from_directory
     from config import Config
-    return send_from_directory(Config.TEMP_DIR, filename, as_attachment=True)
+    import os
+    
+    # Verificar se o arquivo existe
+    file_path = os.path.join(Config.TEMP_DIR, filename)
+    if not os.path.exists(file_path):
+        return jsonify({'error': 'Arquivo não encontrado'}), 404
+    
+    return send_from_directory(
+        Config.TEMP_DIR, 
+        filename, 
+        as_attachment=True,
+        download_name=filename,
+        mimetype='application/gzip'
+    )
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=False)
