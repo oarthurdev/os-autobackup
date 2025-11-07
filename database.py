@@ -60,6 +60,21 @@ class Database:
             )
         ''')
         
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS schedules (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                ssh_host_id INTEGER NOT NULL,
+                schedule_type TEXT NOT NULL,
+                schedule_value TEXT NOT NULL,
+                is_active INTEGER DEFAULT 1,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                last_run TEXT,
+                next_run TEXT,
+                FOREIGN KEY (ssh_host_id) REFERENCES ssh_hosts (id) ON DELETE CASCADE
+            )
+        ''')
+        
         conn.commit()
         conn.close()
     
@@ -243,3 +258,116 @@ class Database:
         
         conn.commit()
         conn.close()
+    
+    def create_schedule(self, ssh_host_id: int, schedule_type: str, schedule_value: str) -> int:
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        
+        now = datetime.now().isoformat()
+        cursor.execute('''
+            INSERT INTO schedules (ssh_host_id, schedule_type, schedule_value, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?)
+        ''', (ssh_host_id, schedule_type, schedule_value, now, now))
+        
+        schedule_id = cursor.lastrowid
+        conn.commit()
+        conn.close()
+        
+        return schedule_id
+    
+    def update_schedule(self, schedule_id: int, schedule_type: str = None, 
+                       schedule_value: str = None, is_active: bool = None,
+                       last_run: str = None, next_run: str = None):
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        
+        now = datetime.now().isoformat()
+        
+        updates = []
+        params = []
+        
+        if schedule_type is not None:
+            updates.append('schedule_type = ?')
+            params.append(schedule_type)
+        
+        if schedule_value is not None:
+            updates.append('schedule_value = ?')
+            params.append(schedule_value)
+        
+        if is_active is not None:
+            updates.append('is_active = ?')
+            params.append(1 if is_active else 0)
+        
+        if last_run is not None:
+            updates.append('last_run = ?')
+            params.append(last_run)
+        
+        if next_run is not None:
+            updates.append('next_run = ?')
+            params.append(next_run)
+        
+        updates.append('updated_at = ?')
+        params.append(now)
+        params.append(schedule_id)
+        
+        query = f"UPDATE schedules SET {', '.join(updates)} WHERE id = ?"
+        cursor.execute(query, params)
+        
+        conn.commit()
+        conn.close()
+    
+    def delete_schedule(self, schedule_id: int):
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute('DELETE FROM schedules WHERE id = ?', (schedule_id,))
+        
+        conn.commit()
+        conn.close()
+    
+    def get_all_schedules(self) -> List[Dict]:
+        conn = self.get_connection()
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        
+        cursor.execute('''
+            SELECT s.*, h.name as host_name, h.host as host_address
+            FROM schedules s
+            JOIN ssh_hosts h ON s.ssh_host_id = h.id
+            ORDER BY s.created_at DESC
+        ''')
+        
+        rows = cursor.fetchall()
+        conn.close()
+        
+        return [dict(row) for row in rows]
+    
+    def get_schedule(self, schedule_id: int) -> Optional[Dict]:
+        conn = self.get_connection()
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        
+        cursor.execute('SELECT * FROM schedules WHERE id = ?', (schedule_id,))
+        
+        row = cursor.fetchone()
+        conn.close()
+        
+        return dict(row) if row else None
+    
+    def get_active_schedules(self) -> List[Dict]:
+        conn = self.get_connection()
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        
+        cursor.execute('''
+            SELECT s.*, h.name as host_name, h.host as host_address
+            FROM schedules s
+            JOIN ssh_hosts h ON s.ssh_host_id = h.id
+            WHERE s.is_active = 1
+            ORDER BY s.next_run ASC
+        ''')
+        
+        rows = cursor.fetchall()
+        conn.close()
+        
+        return [dict(row) for row in rows]
