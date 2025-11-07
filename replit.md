@@ -63,6 +63,16 @@ A Python-based automated backup system for Ubuntu VPS servers with CLI and web d
 **Note**: SSH server credentials are now managed through the web interface and stored encrypted in the database, not in environment variables.
 
 ## Recent Changes
+- **Performance Optimizations for Large Files** (2025-11-07)
+  - Implemented dynamic chunk sizing for files >1GB to accelerate transfers
+  - Download chunks: 4MB for >1GB files, 8MB for >5GB files (was 1MB)
+  - Encryption chunks: 1MB for >1GB files, 2MB for >5GB files (was 64KB)
+  - Google Drive upload chunks: 5MB for >1GB, 10MB for >5GB (was 1MB)
+  - Optimized tar compression with pigz -3 for >1GB files, pigz -1 for >5GB files
+  - Added SFTP prefetching to reduce network latency on large transfers
+  - Increased channel timeouts to 5 minutes for large file operations
+  - Expected speed improvement: 2-4x faster for files >1GB
+
 - **Custom Toast Notification System** (2025-11-06)
   - Replaced native JavaScript `alert()` with modern toast notifications
   - Created custom notification component with 4 types: Success, Error, Warning, Info
