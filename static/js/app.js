@@ -810,7 +810,7 @@ async function viewLogs(backupId) {
 async function restoreBackup(backupId, event) {
     const confirmed = await showConfirm(
         'Restaurar Backup',
-        'Deseja restaurar (descriptografar) este backup? O arquivo .tar.gz será baixado para seu computador.'
+        'Deseja restaurar (descriptografar) este backup? O processo pode demorar alguns minutos. O arquivo .tar.gz será baixado automaticamente quando estiver pronto.'
     );
 
     if (!confirmed) return;
@@ -828,31 +828,70 @@ async function restoreBackup(backupId, event) {
     }
 
     try {
+        // Iniciar processo de restauração
         const response = await fetch(`/api/backup/${backupId}/restore`, {
             method: 'POST'
         });
 
         const result = await response.json();
 
-        if (result.success) {
-            showSuccess('Backup descriptografado! Iniciando download...');
-            
-            // Fazer download automático usando um link temporário
-            const downloadLink = document.createElement('a');
-            downloadLink.href = result.download_path;
-            downloadLink.download = result.file_name;
-            document.body.appendChild(downloadLink);
-            downloadLink.click();
-            document.body.removeChild(downloadLink);
-            
-            showInfo('Se o download não iniciar automaticamente, <a href="' + result.download_path + '">clique aqui</a>', 8000);
-        } else {
-            showError('Erro ao restaurar backup: ' + result.error);
+        if (!result.success) {
+            showError('Erro ao iniciar restauração: ' + result.error);
+            if (btn) {
+                btn.disabled = false;
+                btn.innerHTML = originalContent;
+            }
+            return;
         }
+
+        showInfo('Restauração iniciada! Aguarde enquanto o arquivo é preparado...', 5000);
+
+        // Polling para verificar quando o arquivo está pronto
+        const checkInterval = setInterval(async () => {
+            try {
+                const statusResponse = await fetch(`/api/backup/${backupId}/restore/status`);
+                const status = await statusResponse.json();
+
+                if (status.ready) {
+                    clearInterval(checkInterval);
+                    
+                    showSuccess('Backup pronto! Iniciando download...');
+                    
+                    // Fazer download automático
+                    const downloadLink = document.createElement('a');
+                    downloadLink.href = status.download_path;
+                    downloadLink.download = status.file_name;
+                    document.body.appendChild(downloadLink);
+                    downloadLink.click();
+                    document.body.removeChild(downloadLink);
+                    
+                    setTimeout(() => {
+                        showInfo('Se o download não iniciar, <a href="' + status.download_path + '" download>clique aqui</a>', 8000);
+                    }, 2000);
+
+                    if (btn) {
+                        btn.disabled = false;
+                        btn.innerHTML = originalContent;
+                    }
+                }
+            } catch (error) {
+                console.error('Erro ao verificar status:', error);
+            }
+        }, 2000); // Verificar a cada 2 segundos
+
+        // Timeout de 5 minutos
+        setTimeout(() => {
+            clearInterval(checkInterval);
+            if (btn && btn.disabled) {
+                showWarning('A restauração está demorando mais do que o esperado. Tente novamente mais tarde.');
+                btn.disabled = false;
+                btn.innerHTML = originalContent;
+            }
+        }, 300000); // 5 minutos
+
     } catch (error) {
         console.error('Error restoring backup:', error);
         showError('Erro ao restaurar backup');
-    } finally {
         if (btn) {
             btn.disabled = false;
             btn.innerHTML = originalContent;

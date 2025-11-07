@@ -274,48 +274,88 @@ def restore_backup(backup_id):
         if not backup.get('drive_file_id'):
             return jsonify({'success': False, 'error': 'Arquivo não disponível no Google Drive'}), 400
         
-        # Download do arquivo criptografado do Google Drive
-        drive_manager = GoogleDriveManager()
-        encrypted_file = os.path.join(Config.TEMP_DIR, f"restore_{backup['file_name']}")
+        # Iniciar processo em background
+        def restore_process():
+            try:
+                from googleapiclient.http import MediaIoBaseDownload
+                import io
+                
+                # Download do arquivo criptografado do Google Drive
+                drive_manager = GoogleDriveManager()
+                encrypted_file = os.path.join(Config.TEMP_DIR, f"restore_{backup['file_name']}")
+                
+                # Baixar arquivo
+                request = drive_manager.service.files().get_media(fileId=backup['drive_file_id'])
+                fh = io.FileIO(encrypted_file, 'wb')
+                downloader = MediaIoBaseDownload(fh, request)
+                
+                done = False
+                while not done:
+                    status, done = downloader.next_chunk()
+                
+                # Fechar o arquivo
+                fh.close()
+                
+                # Descriptografar
+                decrypted_file = encrypted_file.replace('.encrypted', '')
+                if not decrypted_file.endswith('.tar.gz'):
+                    decrypted_file = decrypted_file.replace('restore_backup_', 'backup_')
+                
+                encryptor = Encryptor()
+                encryptor.decrypt_file(encrypted_file, decrypted_file)
+                
+                # Remover arquivo criptografado temporário
+                os.remove(encrypted_file)
+            except Exception as e:
+                print(f"Erro ao restaurar backup: {e}")
         
-        # Baixar arquivo
-        from googleapiclient.http import MediaIoBaseDownload
-        import io
+        # Iniciar thread
+        thread = threading.Thread(target=restore_process)
+        thread.daemon = True
+        thread.start()
         
-        request = drive_manager.service.files().get_media(fileId=backup['drive_file_id'])
-        fh = io.FileIO(encrypted_file, 'wb')
-        downloader = MediaIoBaseDownload(fh, request)
-        
-        done = False
-        while not done:
-            status, done = downloader.next_chunk()
-        
-        # Fechar o arquivo
-        fh.close()
-        
-        # Descriptografar
-        decrypted_file = encrypted_file.replace('.encrypted', '')
-        if not decrypted_file.endswith('.tar.gz'):
-            decrypted_file = decrypted_file.replace('restore_backup_', 'backup_')
-        
-        encryptor = Encryptor()
-        encryptor.decrypt_file(encrypted_file, decrypted_file)
-        
-        # Remover arquivo criptografado temporário
-        os.remove(encrypted_file)
-        
-        # Retornar caminho do arquivo descriptografado
-        download_path = f"/download/{os.path.basename(decrypted_file)}"
+        # Retornar imediatamente com informação
+        decrypted_filename = backup['file_name'].replace('.encrypted', '')
+        if not decrypted_filename.endswith('.tar.gz'):
+            decrypted_filename = f"backup_{datetime.now().strftime('%Y%m%d_%H%M%S')}.tar.gz"
         
         return jsonify({
             'success': True,
-            'message': 'Backup restaurado com sucesso',
-            'download_path': download_path,
-            'file_name': os.path.basename(decrypted_file)
+            'message': 'Restauração iniciada! O arquivo será baixado automaticamente quando estiver pronto.',
+            'file_name': decrypted_filename,
+            'backup_id': backup_id
         })
         
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/backup/<int:backup_id>/restore/status')
+def restore_status(backup_id):
+    from config import Config
+    import os
+    
+    # Buscar informações do backup
+    backups = db.get_all_backups(limit=1000)
+    backup = next((b for b in backups if b['id'] == backup_id), None)
+    
+    if not backup:
+        return jsonify({'ready': False, 'error': 'Backup não encontrado'})
+    
+    # Verificar se arquivo descriptografado existe
+    decrypted_filename = backup['file_name'].replace('.encrypted', '')
+    if not decrypted_filename.endswith('.tar.gz'):
+        decrypted_filename = f"backup_{backup['timestamp'].replace(':', '').replace('-', '').replace(' ', '_')}.tar.gz"
+    
+    file_path = os.path.join(Config.TEMP_DIR, decrypted_filename)
+    
+    if os.path.exists(file_path):
+        return jsonify({
+            'ready': True,
+            'download_path': f"/download/{decrypted_filename}",
+            'file_name': decrypted_filename
+        })
+    else:
+        return jsonify({'ready': False, 'message': 'Ainda processando...'})
 
 @app.route('/download/<filename>')
 def download_file(filename):
