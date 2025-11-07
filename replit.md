@@ -5,18 +5,22 @@ A Python-based automated backup system for Ubuntu VPS servers with CLI and web d
 
 ## Architecture
 - **Backend**: Flask web server
-- **Database**: SQLite for backup history, logs, and SSH host management
+- **Database**: SQLite for backup history, logs, SSH host management, and schedules
 - **SSH**: Paramiko for remote VPS connections with encrypted credential storage
 - **Encryption**: AES-256 using cryptography library for backup files
 - **Credentials**: Fernet symmetric encryption for SSH credentials in database
 - **Storage**: Google Drive API integration
+- **Scheduler**: APScheduler for automated backup execution
 - **CLI**: Click-based command-line tool
 
 ## Key Features
+- **Automated Scheduling**: Configure automatic backups (daily, weekly, interval-based)
 - **Multi-Host Management**: Add, edit, delete multiple SSH servers via web interface
 - **Encrypted Credentials**: SSH credentials stored encrypted in database
+- **Concurrency Control**: Thread-safe backup execution preventing overlapping runs
 - Manual backup execution via CLI or web interface
 - SSH connection testing before backup
+- Backup restore/download with decryption
 - Tar.gz compression of backup files
 - AES-256 encryption of backups
 - Google Drive upload with OAuth2
@@ -36,6 +40,7 @@ A Python-based automated backup system for Ubuntu VPS servers with CLI and web d
 ├── credentials_manager.py    # Credential encryption/decryption
 ├── encryption.py             # AES encryption/decryption
 ├── drive_manager.py          # Google Drive API integration
+├── scheduler.py              # Automated backup scheduler
 ├── database.py               # SQLite database operations
 ├── logger.py                 # Logging system
 ├── config.py                 # Configuration management
@@ -63,6 +68,23 @@ A Python-based automated backup system for Ubuntu VPS servers with CLI and web d
 **Note**: SSH server credentials are now managed through the web interface and stored encrypted in the database, not in environment variables.
 
 ## Recent Changes
+- **Automated Backup Scheduling System** (2025-11-07)
+  - Implemented complete scheduling system using APScheduler
+  - Support for multiple schedule types:
+    * Daily: backup at specific time every day
+    * Weekly: backup on specific day/time each week
+    * Interval (hours): backup every N hours
+    * Interval (days): backup every N days
+  - New database table `schedules` with foreign key to SSH hosts
+  - Thread-safe execution with global lock preventing concurrent backups
+  - Centralized backup orchestration for manual and scheduled runs
+  - Web interface for managing schedules (add, edit, delete, toggle active/inactive)
+  - Persistent tracking of last_run and next_run timestamps
+  - Real-time status updates showing when backups are scheduled/executed
+  - Auto-loading of active schedules on server startup
+  - Prevents overlapping backup executions
+  - Full CRUD API for schedule management
+
 - **Performance Optimizations for Large Files** (2025-11-07)
   - Implemented dynamic chunk sizing for files >1GB to accelerate transfers
   - Download chunks: 4MB for >1GB files, 8MB for >5GB files (was 1MB)
@@ -110,12 +132,13 @@ A Python-based automated backup system for Ubuntu VPS servers with CLI and web d
 - Security hardening (SSH host key verification, command injection prevention)
 
 ## Next Phase Features
-- Automated daily scheduling (APScheduler/cron)
-- Full system backup capabilities
-- Real-time progress updates
-- Backup retention policies
-- Email notifications
-- Backup rotation and cleanup
+- Full system backup capabilities (entire server)
+- Real-time progress updates with WebSocket
+- Backup retention policies (auto-delete old backups)
+- Email notifications on success/failure
+- Backup rotation and cleanup automation
+- Incremental backups
+- Backup verification and integrity checks
 
 ## User Preferences
 - Web interface in Portuguese
