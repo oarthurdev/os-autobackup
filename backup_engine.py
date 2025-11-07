@@ -43,7 +43,7 @@ class BackupEngine:
         
         os.makedirs(Config.TEMP_DIR, exist_ok=True)
     
-    def update_progress(self, step_number: int, step_name: str, estimated_size_mb: float = None):
+    def update_progress(self, step_number: int, step_name: str, estimated_size_mb: Optional[float] = None):
         self.progress['current_step_number'] = step_number
         self.progress['current_step'] = step_name
         

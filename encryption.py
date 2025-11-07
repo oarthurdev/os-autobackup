@@ -34,6 +34,15 @@ class Encryptor:
         )
         encryptor = cipher.encryptor()
 
+        # Determine optimal chunk size based on file size
+        file_size = os.path.getsize(input_file)
+        if file_size > 5 * 1024 * 1024 * 1024:  # > 5GB
+            chunk_size = 2 * 1024 * 1024  # 2MB chunks
+        elif file_size > 1 * 1024 * 1024 * 1024:  # > 1GB
+            chunk_size = 1024 * 1024  # 1MB chunks
+        else:
+            chunk_size = 64 * 1024  # 64KB chunks
+
         with open(input_file, 'rb') as f_in:
             with open(output_file, 'wb') as f_out:
                 f_out.write(iv)
@@ -41,7 +50,7 @@ class Encryptor:
                 padder = padding.PKCS7(128).padder()
 
                 while True:
-                    chunk = f_in.read(64 * 1024)
+                    chunk = f_in.read(chunk_size)
                     if not chunk:
                         break
 
@@ -54,6 +63,15 @@ class Encryptor:
                 f_out.write(final_encrypted)
 
     def decrypt_file(self, input_file: str, output_file: str):
+        # Determine optimal chunk size based on file size
+        file_size = os.path.getsize(input_file)
+        if file_size > 5 * 1024 * 1024 * 1024:  # > 5GB
+            chunk_size = 2 * 1024 * 1024  # 2MB chunks
+        elif file_size > 1 * 1024 * 1024 * 1024:  # > 1GB
+            chunk_size = 1024 * 1024  # 1MB chunks
+        else:
+            chunk_size = 64 * 1024  # 64KB chunks
+        
         with open(input_file, 'rb') as f_in:
             iv = f_in.read(16)
 
@@ -68,7 +86,7 @@ class Encryptor:
                 unpadder = padding.PKCS7(128).unpadder()
 
                 while True:
-                    chunk = f_in.read(64 * 1024)
+                    chunk = f_in.read(chunk_size)
                     if not chunk:
                         break
 

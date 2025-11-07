@@ -142,18 +142,30 @@ class SSHManager:
 
         exclude_str = ' '.join([f"--exclude={shlex.quote(e)}" for e in exclusions])
 
+        # Optimize compression level based on file size
+        # For large files (>1GB): use faster compression with pigz
+        # pigz -3 is much faster than default -6 while still giving good compression
+        if total_size >= 5 * 1024 * 1024 * 1024:  # >5GB: very fast compression
+            compression_opts = "pigz -1"  # Fastest compression
+            compression_info = "compressão ultra-rápida"
+        elif total_size >= 1 * 1024 * 1024 * 1024:  # >1GB: fast compression
+            compression_opts = "pigz -3"  # Fast compression
+            compression_info = "compressão rápida"
+        else:
+            compression_opts = "pigz"  # Default compression
+            compression_info = "compressão padrão"
 
-        # Use pigz if available for faster compression, otherwise use gzip
+        # Use pigz if available for faster parallel compression, otherwise use gzip
         tar_command = f"""
             if command -v pigz &> /dev/null; then
-                tar {exclude_str} -I pigz -cf {shlex.quote(remote_archive_path)} {paths_str} 2>&1
+                tar {exclude_str} -I "{compression_opts}" -cf {shlex.quote(remote_archive_path)} {paths_str} 2>&1
             else
                 tar {exclude_str} -czf {shlex.quote(remote_archive_path)} {paths_str} 2>&1
             fi
         """
 
         if progress_callback and total_size >= 1073741824:
-            progress_callback(f"Tamanho estimado: {total_size / (1024*1024):.2f} MB - usando compressão rápida")
+            progress_callback(f"Tamanho estimado: {total_size / (1024*1024):.2f} MB - usando {compression_info}")
 
         stdout, stderr, exit_status = self.execute_command(tar_command)
 
@@ -275,7 +287,6 @@ class SSHManager:
             raise Exception("Not connected to SSH server")
 
         sftp = self.client.open_sftp()
-        chunk_size = 1024 * 1024  # 1MB chunks
         total_downloaded = 0
 
         try:
@@ -285,12 +296,31 @@ class SSHManager:
 
             if file_size is None or file_size <= 0:
                 raise Exception(f"Invalid file size for {remote_path}")
+            
+            # Optimize chunk size based on file size
+            # Larger chunks for larger files reduce I/O overhead significantly
+            if file_size > 5 * 1024 * 1024 * 1024:  # > 5GB
+                chunk_size = 8 * 1024 * 1024  # 8MB chunks
+            elif file_size > 1 * 1024 * 1024 * 1024:  # > 1GB
+                chunk_size = 4 * 1024 * 1024  # 4MB chunks
+            else:
+                chunk_size = 1024 * 1024  # 1MB chunks
 
             if progress_callback:
-                progress_callback(f"Iniciando download de {self._format_bytes(file_size)}")
+                progress_callback(f"Iniciando download de {self._format_bytes(file_size)} (chunks de {chunk_size // (1024*1024)}MB)")
 
+            # Enable prefetching for better performance on large files
+            if hasattr(sftp, 'get_channel'):
+                channel = sftp.get_channel()
+                if hasattr(channel, 'settimeout'):
+                    channel.settimeout(300)  # 5 minute timeout for large files
+            
             # Open remote file for reading
             with sftp.open(remote_path, 'rb') as remote_file:
+                # Enable prefetching for SFTP to reduce latency
+                if hasattr(remote_file, 'prefetch'):
+                    remote_file.prefetch(file_size)
+                
                 # Start encryption streaming
                 encryptor.start_encryption_stream(encrypted_local_path)
 
@@ -304,8 +334,9 @@ class SSHManager:
                         encryptor.encrypt_chunk(chunk)
                         total_downloaded += len(chunk)
 
-                        # Update progress every 10MB
-                        if progress_callback and file_size > 0 and total_downloaded % (10 * 1024 * 1024) == 0:
+                        # Dynamic progress update frequency based on file size
+                        progress_interval = 50 * 1024 * 1024 if file_size > 5 * 1024 * 1024 * 1024 else 10 * 1024 * 1024
+                        if progress_callback and file_size > 0 and total_downloaded % progress_interval < chunk_size:
                             percentage = (total_downloaded / file_size) * 100
                             progress_callback(f"Baixado e criptografado: {self._format_bytes(total_downloaded)} ({percentage:.1f}%)")
 

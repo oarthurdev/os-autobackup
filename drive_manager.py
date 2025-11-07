@@ -50,15 +50,32 @@ class GoogleDriveManager:
         if folder_id or Config.GOOGLE_DRIVE_FOLDER_ID:
             file_metadata['parents'] = [folder_id or Config.GOOGLE_DRIVE_FOLDER_ID]
         
-        media = MediaFileUpload(file_path, resumable=True)
+        # Optimize chunk size for large files
+        file_size = os.path.getsize(file_path)
+        if file_size > 5 * 1024 * 1024 * 1024:  # > 5GB
+            chunk_size = 10 * 1024 * 1024  # 10MB chunks
+        elif file_size > 1 * 1024 * 1024 * 1024:  # > 1GB
+            chunk_size = 5 * 1024 * 1024  # 5MB chunks
+        else:
+            chunk_size = 1024 * 1024  # 1MB chunks (default)
         
-        file = self.service.files().create(
+        media = MediaFileUpload(file_path, resumable=True, chunksize=chunk_size)
+        
+        request = self.service.files().create(
             body=file_metadata,
             media_body=media,
             fields='id, webViewLink'
-        ).execute()
+        )
         
-        return file.get('id')
+        # Upload with progress tracking for large files
+        response = None
+        while response is None:
+            status, response = request.next_chunk()
+            if status:
+                progress = int(status.progress() * 100)
+                # Progress info available but not logged here to avoid spam
+        
+        return response.get('id')
     
     def get_file_link(self, file_id: str) -> str:
         file = self.service.files().get(
