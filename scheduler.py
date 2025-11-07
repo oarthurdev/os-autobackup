@@ -5,7 +5,6 @@ from datetime import datetime, timedelta
 import logging
 from database import Database
 from backup_engine import BackupEngine
-from logger import Logger
 
 class BackupScheduler:
     def __init__(self):
@@ -78,17 +77,19 @@ class BackupScheduler:
         self.logger.info(f"Executing scheduled backup for host {ssh_host_id} (schedule {schedule_id})")
         
         try:
-            now = datetime.now().isoformat()
-            self.db.update_schedule(schedule_id, last_run=now)
+            import app
+            result = app.execute_scheduled_backup(ssh_host_id, schedule_id)
             
-            backup_engine = BackupEngine()
-            backup_engine.perform_backup(host_id=ssh_host_id)
-            
-            job_id = f"schedule_{schedule_id}"
-            next_run = self.scheduler.get_job(job_id).next_run_time
-            self.db.update_schedule(schedule_id, next_run=next_run.isoformat() if next_run else None)
-            
-            self.logger.info(f"Scheduled backup completed successfully for host {ssh_host_id}")
+            if result['success']:
+                job_id = f"schedule_{schedule_id}"
+                job = self.scheduler.get_job(job_id)
+                if job:
+                    next_run = job.next_run_time
+                    self.db.update_schedule(schedule_id, next_run=next_run.isoformat() if next_run else None)
+                
+                self.logger.info(f"Scheduled backup completed successfully for host {ssh_host_id}")
+            else:
+                self.logger.error(f"Scheduled backup failed: {result.get('error', 'Unknown error')}")
             
         except Exception as e:
             self.logger.error(f"Error executing scheduled backup: {str(e)}")

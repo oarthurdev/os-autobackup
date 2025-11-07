@@ -1,5 +1,6 @@
 from flask import Flask, render_template, jsonify, request
 import threading
+from datetime import datetime
 from backup_engine import BackupEngine
 from database import Database
 from drive_manager import GoogleDriveManager
@@ -14,6 +15,7 @@ db = Database()
 ssh_host_manager = SSHHostManager()
 
 backup_in_progress = False
+backup_lock = threading.Lock()
 
 from scheduler import get_scheduler
 scheduler = get_scheduler()
@@ -56,7 +58,7 @@ def backup_status():
 def start_backup():
     global backup_in_progress
     
-    if backup_in_progress:
+    if not backup_lock.acquire(blocking=False):
         return jsonify({'error': 'Backup already in progress'}), 400
     
     data = request.get_json() or {}
@@ -69,12 +71,34 @@ def start_backup():
             backup_engine.perform_backup(host_id=host_id)
         finally:
             backup_in_progress = False
+            backup_lock.release()
     
     thread = threading.Thread(target=run_backup)
     thread.daemon = True
     thread.start()
     
     return jsonify({'message': 'Backup started', 'success': True})
+
+def execute_scheduled_backup(ssh_host_id, schedule_id):
+    global backup_in_progress
+    
+    if not backup_lock.acquire(blocking=False):
+        return {'success': False, 'error': 'Backup already in progress'}
+    
+    try:
+        backup_in_progress = True
+        now = datetime.now().isoformat()
+        
+        backup_engine.perform_backup(host_id=ssh_host_id)
+        
+        db.update_schedule(schedule_id, last_run=now)
+        
+        return {'success': True}
+    except Exception as e:
+        return {'success': False, 'error': str(e)}
+    finally:
+        backup_in_progress = False
+        backup_lock.release()
 
 @app.route('/api/ssh-hosts')
 def get_ssh_hosts():
