@@ -9,13 +9,14 @@ from database import Database
 from logger import BackupLogger
 from config import Config
 from ssh_host_manager import SSHHostManager
+import ssl
 
 class BackupEngine:
     def __init__(self):
         self.db = Database()
         self.logger = None
         self.ssh_host_manager = SSHHostManager()
-        
+
         # Peso relativo de cada etapa (baseado em experiência com arquivos grandes)
         self.step_weights = {
             1: 1,   # Iniciando backup
@@ -26,9 +27,9 @@ class BackupEngine:
             6: 20,  # Upload para Google Drive
             7: 2    # Finalização
         }
-        
+
         self.total_weight = sum(self.step_weights.values())
-        
+
         self.progress = {
             'status': 'idle',
             'current_step': '',
@@ -40,46 +41,46 @@ class BackupEngine:
             'estimated_file_size': None,
             'step_start_times': {}
         }
-        
+
         os.makedirs(Config.TEMP_DIR, exist_ok=True)
-    
+
     def update_progress(self, step_number: int, step_name: str, estimated_size_mb: Optional[float] = None):
         self.progress['current_step_number'] = step_number
         self.progress['current_step'] = step_name
-        
+
         # Registrar tempo de início da etapa
         self.progress['step_start_times'][step_number] = time.time()
-        
+
         # Calcular porcentagem baseada em pesos
         completed_weight = sum(self.step_weights[i] for i in range(1, step_number))
         self.progress['percentage'] = int((completed_weight / self.total_weight) * 100)
         self.progress['status'] = 'in_progress'
-        
+
         # Armazenar tamanho estimado do arquivo
         if estimated_size_mb:
             self.progress['estimated_file_size'] = estimated_size_mb
-        
+
         # Calcular tempo estimado total restante (englobando todas as etapas)
         if self.progress['start_time'] and step_number > 1:
             elapsed_time = time.time() - self.progress['start_time']
-            
+
             # Peso completado até agora
             completed_weight = sum(self.step_weights[i] for i in range(1, step_number))
-            
+
             # Peso restante
             remaining_weight = self.total_weight - completed_weight
-            
+
             if completed_weight > 0:
                 # Tempo médio por unidade de peso já processada
                 time_per_weight_unit = elapsed_time / completed_weight
-                
+
                 # Estimativa base do tempo restante
                 base_estimate = time_per_weight_unit * remaining_weight
-                
+
                 # Ajuste fino baseado no tamanho do arquivo (mais conservador)
                 if self.progress.get('estimated_file_size'):
                     size_mb = self.progress['estimated_file_size']
-                    
+
                     # Fator de ajuste mais realista baseado no tamanho
                     # Apenas para arquivos muito grandes e apenas nas etapas pesadas
                     if size_mb > 3000 and step_number <= 4:  # > 3GB e ainda nas etapas pesadas
@@ -90,11 +91,11 @@ class BackupEngine:
                         # Ajuste menor (máximo 15% extra)
                         size_factor = min(1 + (size_mb / 20000), 1.15)
                         base_estimate *= size_factor
-                
+
                 self.progress['estimated_time_remaining'] = int(base_estimate)
             else:
                 self.progress['estimated_time_remaining'] = None
-    
+
     def reset_progress(self):
         self.progress = {
             'status': 'idle',
@@ -107,29 +108,29 @@ class BackupEngine:
             'estimated_file_size': None,
             'step_start_times': {}
         }
-    
+
     def get_progress(self):
         return self.progress.copy()
-    
+
     def perform_backup(self, host_id: Optional[int] = None, paths: Optional[list] = None) -> dict:
         start_time = datetime.now()
         start_time_str = start_time.isoformat()
-        
+
         self.reset_progress()
         self.progress['start_time'] = time.time()
         self.update_progress(1, 'Iniciando backup...')
-        
+
         backup_id = self.db.create_backup_record(start_time_str)
         self.logger = BackupLogger(backup_id)
-        
+
         self.logger.info(f"Starting backup process (ID: {backup_id})")
         self.db.add_log(backup_id, 'INFO', 'Backup process started')
-        
+
         ssh_manager = None
         local_archive = None
         encrypted_archive = None
         remote_archive = None
-        
+
         try:
             if host_id:
                 ssh_manager = self.ssh_host_manager.get_ssh_manager(host_id)
@@ -142,19 +143,19 @@ class BackupEngine:
                     paths = Config.BACKUP_PATHS
                 ssh_manager = SSHManager()
                 host_name = Config.VPS_HOST
-            
+
             self.logger.info(f"Backup paths: {', '.join(paths)}")
             self.db.add_log(backup_id, 'INFO', f"Paths to backup: {', '.join(paths)}")
-            
+
             self.update_progress(2, f'Conectando ao servidor {host_name}...')
             self.logger.info(f"Connecting to {host_name} via SSH...")
             self.db.add_log(backup_id, 'INFO', f"Connecting to {host_name}")
             ssh_manager.connect()
             self.logger.info("SSH connection established")
             self.db.add_log(backup_id, 'INFO', 'SSH connection successful')
-            
+
             archive_name = f"backup_{datetime.now().strftime('%Y%m%d_%H%M%S')}.tar.gz"
-            
+
             # Estimar tamanho dos diretórios antes de criar o arquivo
             estimated_size_mb = None
             try:
@@ -164,29 +165,29 @@ class BackupEngine:
                 self.db.add_log(backup_id, 'INFO', f"Tamanho estimado: {estimated_size_mb:.2f} MB")
             except Exception as e:
                 self.logger.warning(f"Could not estimate size: {e}")
-            
+
             self.update_progress(3, 'Criando arquivo de backup no servidor...', estimated_size_mb)
             self.logger.info(f"Creating remote archive: {archive_name}")
             self.db.add_log(backup_id, 'INFO', f"Creating archive: {archive_name}")
-            
+
             def archive_progress_callback(message):
                 self.update_progress(3, f'Criando arquivo de backup: {message}', estimated_size_mb)
                 if self.logger:
                     self.logger.info(message)
                 self.db.add_log(backup_id, 'INFO', message)
-            
+
             remote_archive = ssh_manager.create_remote_archive(paths, archive_name, progress_callback=archive_progress_callback)
             self.logger.info(f"Remote archive created: {remote_archive}")
             self.db.add_log(backup_id, 'INFO', 'Archive creation completed')
-            
+
             local_archive = os.path.join(Config.TEMP_DIR, archive_name)
             encrypted_name = archive_name.replace('.tar.gz', '.encrypted')
             encrypted_archive = os.path.join(Config.TEMP_DIR, encrypted_name)
-            
+
             self.update_progress(4, 'Baixando e criptografando arquivo (streaming)...')
             self.logger.info(f"Streaming download and encryption: {remote_archive}")
             self.db.add_log(backup_id, 'INFO', 'Starting streaming download and encryption')
-            
+
             encryptor = Encryptor()
             file_size = ssh_manager.download_and_encrypt_streaming(
                 remote_archive, 
@@ -194,31 +195,46 @@ class BackupEngine:
                 encryptor,
                 progress_callback=lambda msg: self.db.add_log(backup_id, 'INFO', msg)
             )
-            
+
             self.logger.info(f"Streaming completed ({file_size} bytes)")
             self.db.add_log(backup_id, 'INFO', f'Downloaded and encrypted {file_size} bytes')
-            
+
             self.logger.info("Cleaning up remote archive")
             ssh_manager.remove_remote_file(remote_archive)
             ssh_manager.disconnect()
-            
+
             self.update_progress(6, 'Enviando para Google Drive...')
             self.logger.info("Uploading to Google Drive...")
             self.db.add_log(backup_id, 'INFO', 'Uploading to Google Drive')
-            
+
             drive_manager = GoogleDriveManager()
-            drive_file_id = drive_manager.upload_file(encrypted_archive, encrypted_name)
-            
-            self.logger.info(f"Upload completed. File ID: {drive_file_id}")
-            self.db.add_log(backup_id, 'INFO', f'Upload completed: {drive_file_id}')
-            
+            # Substituição do bloco try/except para incluir tratamento de erro SSL
+            try:
+                self.logger.info("Uploading to Google Drive...")
+                self.update_progress(6, 'Enviando para Google Drive...', estimated_size_mb) # Atualiza o progresso com nome da etapa e tamanho estimado
+                drive_file_id = drive_manager.upload_file(encrypted_archive, encrypted_name)
+                self.logger.info(f"Upload completed. File ID: {drive_file_id}")
+                self.db.add_log(backup_id, 'INFO', f'Upload completed: {drive_file_id}')
+            except ssl.SSLError as e:
+                error_msg = f"SSL error during Google Drive upload: {str(e)}. Try re-authenticating: delete token.json and run backup again."
+                self.logger.error(error_msg)
+                self.db.add_log(backup_id, 'ERROR', error_msg)
+                drive_file_id = None
+                raise  # Re-raise o erro para ser capturado pelo bloco except principal
+            except Exception as e:
+                error_msg = f"Google Drive upload failed: {str(e)}"
+                self.logger.error(error_msg)
+                self.db.add_log(backup_id, 'ERROR', error_msg)
+                drive_file_id = None
+                raise  # Re-raise o erro para ser capturado pelo bloco except principal
+
             os.remove(encrypted_archive)
-            
+
             self.update_progress(7, 'Backup concluído com sucesso!')
-            
+
             end_time = datetime.now()
             duration = (end_time - start_time).total_seconds()
-            
+
             self.db.update_backup_record(
                 backup_id=backup_id,
                 status='SUCCESS',
@@ -228,12 +244,12 @@ class BackupEngine:
                 end_time=end_time.isoformat(),
                 duration_seconds=duration
             )
-            
+
             self.logger.info(f"Backup completed successfully in {duration:.2f} seconds")
             self.db.add_log(backup_id, 'INFO', f'Backup completed ({duration:.2f}s)')
-            
+
             self.progress['status'] = 'completed'
-            
+
             return {
                 'success': True,
                 'backup_id': backup_id,
@@ -242,18 +258,18 @@ class BackupEngine:
                 'drive_file_id': drive_file_id,
                 'duration': duration
             }
-            
+
         except Exception as e:
             error_msg = str(e)
             self.logger.error(f"Backup failed: {error_msg}")
             self.db.add_log(backup_id, 'ERROR', error_msg)
-            
+
             self.progress['status'] = 'failed'
             self.progress['current_step'] = f'Erro: {error_msg}'
-            
+
             end_time = datetime.now()
             duration = (end_time - start_time).total_seconds()
-            
+
             self.db.update_backup_record(
                 backup_id=backup_id,
                 status='FAILED',
@@ -261,7 +277,7 @@ class BackupEngine:
                 end_time=end_time.isoformat(),
                 duration_seconds=duration
             )
-            
+
             if ssh_manager:
                 try:
                     if remote_archive:
@@ -269,21 +285,21 @@ class BackupEngine:
                     ssh_manager.disconnect()
                 except:
                     pass
-            
+
             if local_archive and os.path.exists(local_archive):
                 os.remove(local_archive)
             if encrypted_archive and os.path.exists(encrypted_archive):
                 os.remove(encrypted_archive)
-            
+
             return {
                 'success': False,
                 'backup_id': backup_id,
                 'error': error_msg,
                 'duration': duration
             }
-    
+
     def get_backup_history(self, limit: int = 100) -> list:
         return self.db.get_all_backups(limit)
-    
+
     def get_backup_logs(self, backup_id: int) -> list:
         return self.db.get_backup_logs(backup_id)
