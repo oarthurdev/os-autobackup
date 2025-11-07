@@ -15,6 +15,9 @@ ssh_host_manager = SSHHostManager()
 
 backup_in_progress = False
 
+from scheduler import get_scheduler
+scheduler = get_scheduler()
+
 @app.route('/')
 def index():
     return render_template('index.html')
@@ -131,6 +134,104 @@ def delete_ssh_host(host_id):
 def test_ssh_host(host_id):
     result = ssh_host_manager.test_connection(host_id)
     return jsonify(result)
+
+@app.route('/api/schedules')
+def get_schedules():
+    schedules = db.get_all_schedules()
+    return jsonify(schedules)
+
+@app.route('/api/schedules', methods=['POST'])
+def create_schedule():
+    from scheduler import get_scheduler
+    
+    data = request.get_json()
+    
+    try:
+        schedule_id = db.create_schedule(
+            ssh_host_id=data['ssh_host_id'],
+            schedule_type=data['schedule_type'],
+            schedule_value=data['schedule_value']
+        )
+        
+        scheduler = get_scheduler()
+        scheduler.reload_schedule(schedule_id)
+        
+        return jsonify({
+            'success': True,
+            'schedule_id': schedule_id,
+            'message': 'Agendamento criado com sucesso'
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 400
+
+@app.route('/api/schedules/<int:schedule_id>', methods=['PUT'])
+def update_schedule(schedule_id):
+    from scheduler import get_scheduler
+    
+    data = request.get_json()
+    
+    try:
+        db.update_schedule(
+            schedule_id=schedule_id,
+            schedule_type=data.get('schedule_type'),
+            schedule_value=data.get('schedule_value'),
+            is_active=data.get('is_active')
+        )
+        
+        scheduler = get_scheduler()
+        scheduler.reload_schedule(schedule_id)
+        
+        return jsonify({'success': True, 'message': 'Agendamento atualizado com sucesso'})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 400
+
+@app.route('/api/schedules/<int:schedule_id>', methods=['DELETE'])
+def delete_schedule(schedule_id):
+    from scheduler import get_scheduler
+    
+    try:
+        scheduler = get_scheduler()
+        scheduler.remove_schedule(schedule_id)
+        
+        db.delete_schedule(schedule_id)
+        
+        return jsonify({'success': True, 'message': 'Agendamento removido com sucesso'})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 400
+
+@app.route('/api/schedules/<int:schedule_id>/toggle', methods=['POST'])
+def toggle_schedule(schedule_id):
+    from scheduler import get_scheduler
+    
+    try:
+        schedule = db.get_schedule(schedule_id)
+        if not schedule:
+            return jsonify({'success': False, 'error': 'Agendamento não encontrado'}), 404
+        
+        new_status = not bool(schedule['is_active'])
+        db.update_schedule(schedule_id, is_active=new_status)
+        
+        scheduler = get_scheduler()
+        scheduler.reload_schedule(schedule_id)
+        
+        return jsonify({
+            'success': True,
+            'is_active': new_status,
+            'message': f"Agendamento {'ativado' if new_status else 'desativado'} com sucesso"
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 400
+
+@app.route('/api/scheduler/status')
+def scheduler_status():
+    from scheduler import get_scheduler
+    
+    try:
+        scheduler = get_scheduler()
+        status = scheduler.get_scheduler_status()
+        return jsonify(status)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 @app.route('/api/backup/<int:backup_id>/restore', methods=['POST'])
 def restore_backup(backup_id):

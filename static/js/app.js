@@ -1,5 +1,6 @@
-let logsModal, hostModal, backupModal;
+let logsModal, hostModal, backupModal, scheduleModal;
 let currentHostId = null;
+let currentScheduleId = null;
 let backupChart = null;
 let allBackups = [];
 
@@ -7,6 +8,7 @@ document.addEventListener('DOMContentLoaded', function() {
     logsModal = new bootstrap.Modal(document.getElementById('logsModal'));
     hostModal = new bootstrap.Modal(document.getElementById('hostModal'));
     backupModal = new bootstrap.Modal(document.getElementById('backupModal'));
+    scheduleModal = new bootstrap.Modal(document.getElementById('scheduleModal'));
 
     // Load theme preference
     loadTheme();
@@ -17,10 +19,12 @@ document.addEventListener('DOMContentLoaded', function() {
     loadStatus();
     loadSSHHosts();
     loadBackups();
+    loadSchedules();
 
     setInterval(loadStatus, 5000);
     setInterval(loadSSHHosts, 15000);
     setInterval(loadBackups, 10000);
+    setInterval(loadSchedules, 15000);
 });
 
 // Custom Toast Notification System
@@ -886,5 +890,230 @@ function formatTime(seconds) {
         return `${minutes}m ${secs}s`;
     } else {
         return `${secs}s`;
+    }
+}
+
+async function loadSchedules() {
+    try {
+        const response = await fetch('/api/schedules');
+        const schedules = await response.json();
+        
+        const schedulesTable = document.getElementById('schedulesTable');
+        
+        if (schedules.length === 0) {
+            schedulesTable.innerHTML = `
+                <tr>
+                    <td colspan="7" class="text-center text-muted py-4">
+                        <i class="fas fa-calendar fa-3x mb-3 d-block"></i>
+                        Nenhum agendamento configurado
+                    </td>
+                </tr>
+            `;
+            return;
+        }
+        
+        schedulesTable.innerHTML = schedules.map(schedule => {
+            const scheduleTypeLabels = {
+                'daily': 'Diário',
+                'weekly': 'Semanal',
+                'interval_hours': 'Intervalo (Horas)',
+                'interval_days': 'Intervalo (Dias)'
+            };
+            
+            const isActive = schedule.is_active === 1;
+            
+            return `
+                <tr>
+                    <td><strong>${schedule.host_name}</strong></td>
+                    <td><span class="badge bg-info">${scheduleTypeLabels[schedule.schedule_type] || schedule.schedule_type}</span></td>
+                    <td>${formatScheduleValue(schedule.schedule_type, schedule.schedule_value)}</td>
+                    <td>${schedule.last_run ? formatDate(schedule.last_run) : '<span class="text-muted">Nunca executado</span>'}</td>
+                    <td>${schedule.next_run ? formatDate(schedule.next_run) : '<span class="text-muted">N/A</span>'}</td>
+                    <td>
+                        <span class="badge ${isActive ? 'bg-success' : 'bg-secondary'}">
+                            ${isActive ? 'Ativo' : 'Inativo'}
+                        </span>
+                    </td>
+                    <td>
+                        <button class="btn btn-sm ${isActive ? 'btn-warning' : 'btn-success'}" onclick="toggleSchedule(${schedule.id})" title="${isActive ? 'Desativar' : 'Ativar'}">
+                            <i class="fas fa-${isActive ? 'pause' : 'play'}"></i>
+                        </button>
+                        <button class="btn btn-sm btn-danger" onclick="deleteSchedule(${schedule.id})" title="Excluir">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </td>
+                </tr>
+            `;
+        }).join('');
+    } catch (error) {
+        console.error('Error loading schedules:', error);
+    }
+}
+
+function formatScheduleValue(type, value) {
+    switch (type) {
+        case 'daily':
+            return `Todos os dias às ${value}`;
+        case 'weekly':
+            const [day, time] = value.split(' ');
+            const days = {
+                'mon': 'Segunda', 'tue': 'Terça', 'wed': 'Quarta',
+                'thu': 'Quinta', 'fri': 'Sexta', 'sat': 'Sábado', 'sun': 'Domingo'
+            };
+            return `Toda ${days[day]} às ${time}`;
+        case 'interval_hours':
+            return `A cada ${value} hora(s)`;
+        case 'interval_days':
+            return `A cada ${value} dia(s)`;
+        default:
+            return value;
+    }
+}
+
+function showAddScheduleModal() {
+    currentScheduleId = null;
+    document.getElementById('scheduleModalTitle').innerHTML = '<i class="fas fa-clock"></i> Adicionar Agendamento';
+    document.getElementById('scheduleForm').reset();
+    document.getElementById('scheduleId').value = '';
+    
+    loadHostsForSchedule();
+    scheduleModal.show();
+}
+
+async function loadHostsForSchedule() {
+    try {
+        const response = await fetch('/api/ssh-hosts');
+        const hosts = await response.json();
+        
+        const select = document.getElementById('scheduleHostSelect');
+        select.innerHTML = '<option value="">Selecione um servidor...</option>' +
+            hosts.map(host => `<option value="${host.id}">${host.name} (${host.host})</option>`).join('');
+    } catch (error) {
+        console.error('Error loading hosts:', error);
+    }
+}
+
+function updateScheduleValueField() {
+    const scheduleType = document.getElementById('scheduleType').value;
+    const scheduleValue = document.getElementById('scheduleValue');
+    const scheduleValueHelp = document.getElementById('scheduleValueHelp');
+    
+    switch (scheduleType) {
+        case 'daily':
+            scheduleValue.type = 'time';
+            scheduleValue.placeholder = '';
+            scheduleValueHelp.textContent = 'Horário em que o backup será executado todos os dias';
+            break;
+        case 'weekly':
+            scheduleValue.type = 'text';
+            scheduleValue.placeholder = 'mon 14:00';
+            scheduleValueHelp.textContent = 'Formato: dia hora (ex: mon 14:00, tue 09:30). Dias: mon, tue, wed, thu, fri, sat, sun';
+            break;
+        case 'interval_hours':
+            scheduleValue.type = 'number';
+            scheduleValue.placeholder = '6';
+            scheduleValue.min = '1';
+            scheduleValue.max = '24';
+            scheduleValueHelp.textContent = 'Intervalo em horas (1-24)';
+            break;
+        case 'interval_days':
+            scheduleValue.type = 'number';
+            scheduleValue.placeholder = '1';
+            scheduleValue.min = '1';
+            scheduleValue.max = '30';
+            scheduleValueHelp.textContent = 'Intervalo em dias (1-30)';
+            break;
+        default:
+            scheduleValue.type = 'text';
+            scheduleValue.placeholder = 'Selecione o tipo primeiro';
+            scheduleValueHelp.textContent = '';
+    }
+}
+
+async function saveSchedule() {
+    const hostId = document.getElementById('scheduleHostSelect').value;
+    const scheduleType = document.getElementById('scheduleType').value;
+    let scheduleValue = document.getElementById('scheduleValue').value;
+    
+    if (!hostId || !scheduleType || !scheduleValue) {
+        showError('Por favor, preencha todos os campos obrigatórios');
+        return;
+    }
+    
+    if (scheduleType === 'daily' && scheduleValue.length === 5) {
+        const parts = scheduleValue.split(':');
+        scheduleValue = `${parts[0]}:${parts[1]}`;
+    }
+    
+    try {
+        const response = await fetch('/api/schedules', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                ssh_host_id: parseInt(hostId),
+                schedule_type: scheduleType,
+                schedule_value: scheduleValue
+            })
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            showSuccess('Agendamento criado com sucesso!');
+            scheduleModal.hide();
+            loadSchedules();
+        } else {
+            showError('Erro ao criar agendamento: ' + result.error);
+        }
+    } catch (error) {
+        console.error('Error saving schedule:', error);
+        showError('Erro ao salvar agendamento');
+    }
+}
+
+async function toggleSchedule(scheduleId) {
+    try {
+        const response = await fetch(`/api/schedules/${scheduleId}/toggle`, {
+            method: 'POST'
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            showSuccess(result.message);
+            loadSchedules();
+        } else {
+            showError('Erro: ' + result.error);
+        }
+    } catch (error) {
+        console.error('Error toggling schedule:', error);
+        showError('Erro ao alterar status do agendamento');
+    }
+}
+
+async function deleteSchedule(scheduleId) {
+    const confirmed = await showConfirm(
+        'Excluir Agendamento',
+        'Tem certeza que deseja excluir este agendamento? Esta ação não pode ser desfeita.'
+    );
+    
+    if (!confirmed) return;
+    
+    try {
+        const response = await fetch(`/api/schedules/${scheduleId}`, {
+            method: 'DELETE'
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            showSuccess('Agendamento excluído com sucesso!');
+            loadSchedules();
+        } else {
+            showError('Erro ao excluir agendamento: ' + result.error);
+        }
+    } catch (error) {
+        console.error('Error deleting schedule:', error);
+        showError('Erro ao excluir agendamento');
     }
 }
