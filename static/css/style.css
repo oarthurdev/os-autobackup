@@ -482,28 +482,56 @@ body {
 }
 
 .status-success, .bg-success {
-    background: rgba(0, 200, 83, 0.1);
-    color: var(--accent-success);
+    background: rgba(0, 200, 83, 0.15);
+    color: #00c853;
+}
+
+[data-theme="dark"] .status-success,
+[data-theme="dark"] .bg-success {
+    background: rgba(0, 200, 83, 0.2);
+    color: #00e676;
 }
 
 .status-failed, .bg-danger {
-    background: rgba(255, 59, 48, 0.1);
-    color: var(--accent-danger);
+    background: rgba(255, 59, 48, 0.15);
+    color: #d32f2f;
+}
+
+[data-theme="dark"] .status-failed,
+[data-theme="dark"] .bg-danger {
+    background: rgba(255, 59, 48, 0.2);
+    color: #ff5252;
 }
 
 .status-in-progress, .bg-warning {
-    background: rgba(255, 149, 0, 0.1);
-    color: var(--accent-warning);
+    background: rgba(255, 149, 0, 0.15);
+    color: #f57c00;
+}
+
+[data-theme="dark"] .status-in-progress,
+[data-theme="dark"] .bg-warning {
+    background: rgba(255, 149, 0, 0.2);
+    color: #ffab40;
 }
 
 .bg-info {
-    background: rgba(0, 122, 255, 0.1);
-    color: var(--accent-info);
+    background: rgba(0, 122, 255, 0.15);
+    color: #0277bd;
+}
+
+[data-theme="dark"] .bg-info {
+    background: rgba(0, 122, 255, 0.2);
+    color: #40c4ff;
 }
 
 .bg-secondary {
     background: var(--bg-tertiary);
     color: var(--text-secondary);
+}
+
+[data-theme="dark"] .bg-secondary {
+    background: rgba(255, 255, 255, 0.1);
+    color: #bdbdbd;
 }
 
 /* Buttons in tables */
