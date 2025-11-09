@@ -23,7 +23,7 @@ class Database:
                 status TEXT NOT NULL,
                 file_name TEXT,
                 file_size INTEGER,
-                drive_file_id TEXT,
+                drive_file_id TEXT,  -- Nome mantido para compatibilidade; armazena ID do arquivo no Supabase Storage
                 error_message TEXT,
                 start_time TEXT,
                 end_time TEXT,

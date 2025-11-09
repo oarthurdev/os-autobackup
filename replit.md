@@ -1,15 +1,15 @@
 # OS Backup
 
 ## Project Overview
-A Python-based automated backup system for Ubuntu VPS servers with CLI and web dashboard interfaces. The system performs SSH-based backups, encrypts them with AES-256, and uploads them to Google Drive. Now features multi-host management through the web interface.
+A Python-based automated backup system for Ubuntu VPS servers with CLI and web dashboard interfaces. The system performs SSH-based backups, compresses them as ZIP files, and uploads them to Supabase Storage. Now features multi-host management through the web interface.
 
 ## Architecture
 - **Backend**: Flask web server
 - **Database**: SQLite for backup history, logs, SSH host management, and schedules
 - **SSH**: Paramiko for remote VPS connections with encrypted credential storage
-- **Encryption**: AES-256 using cryptography library for backup files
 - **Credentials**: Fernet symmetric encryption for SSH credentials in database
-- **Storage**: Google Drive API integration
+- **Storage**: Supabase Storage for backup file storage
+- **Compression**: ZIP format with optimized compression levels
 - **Scheduler**: APScheduler for automated backup execution
 - **CLI**: Click-based command-line tool
 
@@ -20,10 +20,9 @@ A Python-based automated backup system for Ubuntu VPS servers with CLI and web d
 - **Concurrency Control**: Thread-safe backup execution preventing overlapping runs
 - Manual backup execution via CLI or web interface
 - SSH connection testing before backup
-- Backup restore/download with decryption
-- Tar.gz compression of backup files
-- AES-256 encryption of backups
-- Google Drive upload with OAuth2
+- Backup restore/download from Supabase Storage
+- ZIP compression of backup files with smart compression levels
+- Supabase Storage integration for reliable cloud storage
 - Backup history tracking in SQLite
 - Portuguese web interface
 - English CLI interface
@@ -32,42 +31,53 @@ A Python-based automated backup system for Ubuntu VPS servers with CLI and web d
 ## Project Structure
 ```
 .
-├── app.py                    # Flask web application
-├── cli.py                    # Command-line interface
-├── backup_engine.py          # Core backup logic
-├── ssh_manager.py            # SSH connection manager
-├── ssh_host_manager.py       # SSH host CRUD operations
-├── credentials_manager.py    # Credential encryption/decryption
-├── encryption.py             # AES encryption/decryption
-├── drive_manager.py          # Google Drive API integration
-├── scheduler.py              # Automated backup scheduler
-├── database.py               # SQLite database operations
-├── logger.py                 # Logging system
-├── config.py                 # Configuration management
-├── templates/                # HTML templates (Portuguese)
+├── app.py                      # Flask web application
+├── cli.py                      # Command-line interface
+├── backup_engine.py            # Core backup logic
+├── ssh_manager.py              # SSH connection manager
+├── ssh_host_manager.py         # SSH host CRUD operations
+├── credentials_manager.py      # Credential encryption/decryption
+├── supabase_storage_manager.py # Supabase Storage integration
+├── scheduler.py                # Automated backup scheduler
+├── database.py                 # SQLite database operations
+├── logger.py                   # Logging system
+├── config.py                   # Configuration management
+├── templates/                  # HTML templates (Portuguese)
 │   └── index.html
-├── static/                   # CSS and JavaScript
+├── static/                     # CSS and JavaScript
 │   ├── css/style.css
 │   └── js/app.js
-├── requirements.txt          # Python dependencies
-├── README.md                 # Full documentation
-└── SECURITY.md               # Security guidelines
+├── requirements.txt            # Python dependencies
+├── README.md                   # Full documentation
+└── SECURITY.md                 # Security guidelines
 ```
 
 ## Setup Requirements
 1. Python 3.11
-2. Google Drive API credentials (credentials.json)
+2. Supabase project with Storage enabled
 3. SSH access to target VPS (password or key-based)
-4. Encryption key for backups (generated via CLI)
 
-## Environment Variables (Optional)
-- `ENCRYPTION_KEY` - Base64 encryption key for backups
-- `GOOGLE_DRIVE_FOLDER_ID` - Google Drive folder for uploads
-- `GOOGLE_DRIVE_CREDENTIALS_FILE` - Path to credentials.json
+## Environment Variables (Required)
+- `SUPABASE_URL` - Your Supabase project URL
+- `SUPABASE_SERVICE_KEY` - Supabase service role key
+- `SUPABASE_BUCKET_NAME` - Storage bucket name (default: "backups")
+- `ENCRYPTION_KEY` - Base64 encryption key for SSH credentials (optional, auto-generated)
 
-**Note**: SSH server credentials are now managed through the web interface and stored encrypted in the database, not in environment variables.
+**Note**: SSH server credentials are managed through the web interface and stored encrypted in the database.
 
 ## Recent Changes
+- **Migration to Supabase Storage and ZIP Format** (2025-11-09)
+  - **BREAKING CHANGE**: Migrated from Google Drive to Supabase Storage
+  - Changed backup format from TAR.GZ to ZIP for better compatibility
+  - Removed backup file encryption (backups are now stored as plain ZIP files)
+  - Updated backup engine to use Supabase Storage API
+  - Removed dependency on Google API libraries
+  - Simplified backup/restore process (no decryption needed)
+  - ZIP compression with smart level selection (faster for large files)
+  - Maintained encryption for SSH credentials in database
+  - Updated requirements.txt to include supabase library
+  - Removed encryption.py and drive_manager.py modules
+  - All existing functionality preserved with new storage backend
 - **Automated Backup Scheduling System** (2025-11-07)
   - Implemented complete scheduling system using APScheduler
   - Support for multiple schedule types:

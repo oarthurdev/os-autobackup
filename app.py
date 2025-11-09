@@ -3,7 +3,6 @@ import threading
 from datetime import datetime
 from backup_engine import BackupEngine
 from database import Database
-from drive_manager import GoogleDriveManager
 from ssh_host_manager import SSHHostManager
 from config import Config
 

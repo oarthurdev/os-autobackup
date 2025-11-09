@@ -12,6 +12,9 @@ class Config:
     
     BACKUP_PATHS = os.getenv('BACKUP_PATHS', '/home').split(',')
     
+    # Chave de criptografia para senhas SSH armazenadas no banco de dados
+    ENCRYPTION_KEY = os.getenv('ENCRYPTION_KEY', '')
+    
     SUPABASE_URL = os.getenv('SUPABASE_URL', '')
     SUPABASE_SERVICE_KEY = os.getenv('SUPABASE_SERVICE_KEY', '')
     SUPABASE_BUCKET_NAME = os.getenv('SUPABASE_BUCKET_NAME', 'backups')
