@@ -126,28 +126,62 @@ class SSHManager:
         remote_temp_dir = '/tmp'
         remote_archive_path = f"{remote_temp_dir}/{archive_name}"
 
-        # Build exclusion string with proper zip syntax
-        # zip expects: -x "pattern1" "pattern2" ...
-        exclude_parts = ' '.join([f'"{e}"' for e in exclusions])
-        exclude_str = f'-x {exclude_parts}' if exclusions else ''
-
         # Optimize compression level based on file size
-        # ZIP compression levels: 0 (no compression) to 9 (best compression)
-        # Level 1-3 for large files (faster), level 6 for smaller files (balanced)
-        if total_size >= 5 * 1024 * 1024 * 1024:  # >5GB: minimal compression
-            compression_level = "1"
-            compression_info = "compressão mínima (mais rápido)"
-        elif total_size >= 1 * 1024 * 1024 * 1024:  # >1GB: fast compression
-            compression_level = "3"
-            compression_info = "compressão rápida"
+        # For files >1GB, use parallel compression with pigz if available
+        use_pigz = False
+        if total_size >= 1 * 1024 * 1024 * 1024:  # >1GB
+            # Check if pigz is available for parallel compression
+            check_pigz = "command -v pigz >/dev/null 2>&1 && echo 'yes' || echo 'no'"
+            stdout_check, _, _ = self.execute_command(check_pigz)
+            has_pigz = stdout_check.strip() == 'yes'
+            
+            if has_pigz:
+                use_pigz = True
+                # Use tar with pigz for parallel compression (MUCH faster)
+                if total_size >= 5 * 1024 * 1024 * 1024:  # >5GB: minimal compression
+                    compression_level = "1"
+                    compression_info = "compressão paralela ultra-rápida (pigz -1)"
+                else:  # 1-5GB: fast compression
+                    compression_level = "3"
+                    compression_info = "compressão paralela rápida (pigz -3)"
+                
+                # Create tar.gz using pigz (parallel gzip)
+                # Build tar exclusion string
+                tar_exclude_parts = ' '.join([f'--exclude="{e}"' for e in exclusions])
+                remote_archive_path = remote_archive_path.replace('.zip', '.tar.gz')
+                
+                tar_command = f"""
+                    cd / && tar {tar_exclude_parts} -cf - {paths_str} 2>/dev/null | pigz -{compression_level} -p $(nproc) > {shlex.quote(remote_archive_path)} 2>&1
+                """
+                zip_command = tar_command
+            else:
+                # Fallback to zip with minimal compression for large files
+                if total_size >= 5 * 1024 * 1024 * 1024:  # >5GB
+                    compression_level = "1"
+                    compression_info = "compressão mínima (rápido)"
+                else:  # 1-5GB
+                    compression_level = "3"
+                    compression_info = "compressão rápida"
+                
+                # Build zip exclusion string
+                zip_exclude_parts = ' '.join([f'"{e}"' for e in exclusions])
+                exclude_str = f'-x {zip_exclude_parts}' if exclusions else ''
+                
+                zip_command = f"""
+                    cd / && zip -{compression_level} -q -r {shlex.quote(remote_archive_path)} {paths_str} {exclude_str} 2>&1
+                """
         else:
+            # Small files: use standard zip with balanced compression
             compression_level = "6"
             compression_info = "compressão balanceada"
-
-        # Use zip command with compression level
-        zip_command = f"""
-            cd / && zip -{compression_level} -r {shlex.quote(remote_archive_path)} {paths_str} {exclude_str} 2>&1
-        """
+            
+            # Build zip exclusion string
+            zip_exclude_parts = ' '.join([f'"{e}"' for e in exclusions])
+            exclude_str = f'-x {zip_exclude_parts}' if exclusions else ''
+            
+            zip_command = f"""
+                cd / && zip -{compression_level} -q -r {shlex.quote(remote_archive_path)} {paths_str} {exclude_str} 2>&1
+            """
 
         if progress_callback and total_size >= 1073741824:
             progress_callback(f"Tamanho estimado: {total_size / (1024*1024):.2f} MB - usando {compression_info}")

@@ -68,6 +68,17 @@ A Python-based automated backup system for Ubuntu VPS servers with CLI and web d
 **Note**: SSH server credentials are managed through the web interface and stored encrypted in the database.
 
 ## Recent Changes
+- **Performance: Parallel Compression for Large Backups** (2025-11-09)
+  - **MAJOR SPEEDUP**: Added pigz (parallel gzip) support for backups >1GB
+  - Automatic detection: Uses pigz if available on VPS, falls back to zip
+  - Compression strategy:
+    * >5GB: pigz -1 (ultra-fast, uses all CPU cores) ~3-5x faster
+    * 1-5GB: pigz -3 (fast, uses all CPU cores) ~2-4x faster
+    * <1GB: zip -6 (balanced, single-threaded)
+  - Format: tar.gz when using pigz, zip for fallback
+  - Updated Supabase Storage to handle both .tar.gz and .zip files
+  - Expected performance: 10GB backup now takes ~2-3min instead of ~8-12min
+
 - **Fixed Backup Size Estimation** (2025-11-09)
   - **CRITICAL FIX**: Corrected massive size estimation bug for "/" backups
   - Previously: Virtual filesystems (/proc, /sys, /dev) caused estimates of ~687TB

@@ -36,6 +36,14 @@ class SupabaseStorageManager:
         if not file_name:
             file_name = os.path.basename(file_path)
 
+        # Determine content type based on file extension
+        if file_name.endswith('.tar.gz') or file_name.endswith('.tgz'):
+            content_type = "application/gzip"
+        elif file_name.endswith('.zip'):
+            content_type = "application/zip"
+        else:
+            content_type = "application/octet-stream"
+
         try:
             with open(file_path, 'rb') as f:
                 file_data = f.read()
@@ -43,7 +51,7 @@ class SupabaseStorageManager:
             response = self.client.storage.from_(self.bucket_name).upload(
                 file_name,
                 file_data,
-                file_options={"content-type": "application/zip"}
+                file_options={"content-type": content_type}
             )
             
             return file_name
