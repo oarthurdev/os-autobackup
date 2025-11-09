@@ -12,11 +12,9 @@ class Config:
     
     BACKUP_PATHS = os.getenv('BACKUP_PATHS', '/home').split(',')
     
-    ENCRYPTION_KEY = os.getenv('ENCRYPTION_KEY', '')
-    
-    GOOGLE_DRIVE_CREDENTIALS_FILE = os.getenv('GOOGLE_DRIVE_CREDENTIALS_FILE', 'credentials.json')
-    GOOGLE_DRIVE_TOKEN_FILE = os.getenv('GOOGLE_DRIVE_TOKEN_FILE', 'token.json')
-    GOOGLE_DRIVE_FOLDER_ID = os.getenv('GOOGLE_DRIVE_FOLDER_ID', '')
+    SUPABASE_URL = os.getenv('SUPABASE_URL', '')
+    SUPABASE_SERVICE_KEY = os.getenv('SUPABASE_SERVICE_KEY', '')
+    SUPABASE_BUCKET_NAME = os.getenv('SUPABASE_BUCKET_NAME', 'backups')
     
     FLASK_SECRET_KEY = os.getenv('FLASK_SECRET_KEY', 'dev-secret-key-change-in-production')
     
