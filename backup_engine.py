@@ -3,13 +3,11 @@ import time
 from datetime import datetime
 from typing import Optional
 from ssh_manager import SSHManager
-from encryption import Encryptor
-from drive_manager import GoogleDriveManager
+from supabase_storage_manager import SupabaseStorageManager
 from database import Database
 from logger import BackupLogger
 from config import Config
 from ssh_host_manager import SSHHostManager
-import ssl
 
 class BackupEngine:
     def __init__(self):
@@ -21,10 +19,10 @@ class BackupEngine:
         self.step_weights = {
             1: 1,   # Iniciando backup
             2: 2,   # Conectando ao servidor
-            3: 40,  # Criando arquivo (compressão) - MAIS DEMORADO
-            4: 30,  # Download e criptografia streaming
+            3: 40,  # Criando arquivo ZIP (compressão) - MAIS DEMORADO
+            4: 30,  # Download
             5: 5,   # Limpeza remota
-            6: 20,  # Upload para Google Drive
+            6: 20,  # Upload para Supabase Storage
             7: 2    # Finalização
         }
 
@@ -154,7 +152,7 @@ class BackupEngine:
             self.logger.info("SSH connection established")
             self.db.add_log(backup_id, 'INFO', 'SSH connection successful')
 
-            archive_name = f"backup_{datetime.now().strftime('%Y%m%d_%H%M%S')}.tar.gz"
+            archive_name = f"backup_{datetime.now().strftime('%Y%m%d_%H%M%S')}.zip"
 
             # Estimar tamanho dos diretórios antes de criar o arquivo
             estimated_size_mb = None
@@ -181,54 +179,44 @@ class BackupEngine:
             self.db.add_log(backup_id, 'INFO', 'Archive creation completed')
 
             local_archive = os.path.join(Config.TEMP_DIR, archive_name)
-            encrypted_name = archive_name.replace('.tar.gz', '.encrypted')
-            encrypted_archive = os.path.join(Config.TEMP_DIR, encrypted_name)
 
-            self.update_progress(4, 'Baixando e criptografando arquivo (streaming)...')
-            self.logger.info(f"Streaming download and encryption: {remote_archive}")
-            self.db.add_log(backup_id, 'INFO', 'Starting streaming download and encryption')
+            self.update_progress(4, 'Baixando arquivo ZIP...')
+            self.logger.info(f"Streaming download: {remote_archive}")
+            self.db.add_log(backup_id, 'INFO', 'Starting download')
 
-            encryptor = Encryptor()
-            file_size = ssh_manager.download_and_encrypt_streaming(
+            file_size = ssh_manager.download_file_streaming(
                 remote_archive, 
-                encrypted_archive,
-                encryptor,
+                local_archive,
                 progress_callback=lambda msg: self.db.add_log(backup_id, 'INFO', msg)
             )
 
-            self.logger.info(f"Streaming completed ({file_size} bytes)")
-            self.db.add_log(backup_id, 'INFO', f'Downloaded and encrypted {file_size} bytes')
+            self.logger.info(f"Download completed ({file_size} bytes)")
+            self.db.add_log(backup_id, 'INFO', f'Downloaded {file_size} bytes')
 
+            self.update_progress(5, 'Limpando arquivos temporários no servidor...')
             self.logger.info("Cleaning up remote archive")
             ssh_manager.remove_remote_file(remote_archive)
             ssh_manager.disconnect()
 
-            self.update_progress(6, 'Enviando para Google Drive...')
-            self.logger.info("Uploading to Google Drive...")
-            self.db.add_log(backup_id, 'INFO', 'Uploading to Google Drive')
+            self.update_progress(6, 'Enviando para Supabase Storage...')
+            self.logger.info("Uploading to Supabase Storage...")
+            self.db.add_log(backup_id, 'INFO', 'Uploading to Supabase Storage')
 
-            drive_manager = GoogleDriveManager()
-            # Substituição do bloco try/except para incluir tratamento de erro SSL
+            storage_manager = SupabaseStorageManager()
             try:
-                self.logger.info("Uploading to Google Drive...")
-                self.update_progress(6, 'Enviando para Google Drive...', estimated_size_mb) # Atualiza o progresso com nome da etapa e tamanho estimado
-                drive_file_id = drive_manager.upload_file(encrypted_archive, encrypted_name)
-                self.logger.info(f"Upload completed. File ID: {drive_file_id}")
-                self.db.add_log(backup_id, 'INFO', f'Upload completed: {drive_file_id}')
-            except ssl.SSLError as e:
-                error_msg = f"SSL error during Google Drive upload: {str(e)}. Try re-authenticating: delete token.json and run backup again."
-                self.logger.error(error_msg)
-                self.db.add_log(backup_id, 'ERROR', error_msg)
-                drive_file_id = None
-                raise  # Re-raise o erro para ser capturado pelo bloco except principal
+                self.logger.info("Uploading to Supabase Storage...")
+                self.update_progress(6, 'Enviando para Supabase Storage...', estimated_size_mb)
+                storage_file_id = storage_manager.upload_file(local_archive, archive_name)
+                self.logger.info(f"Upload completed. File: {storage_file_id}")
+                self.db.add_log(backup_id, 'INFO', f'Upload completed: {storage_file_id}')
             except Exception as e:
-                error_msg = f"Google Drive upload failed: {str(e)}"
+                error_msg = f"Supabase Storage upload failed: {str(e)}"
                 self.logger.error(error_msg)
                 self.db.add_log(backup_id, 'ERROR', error_msg)
-                drive_file_id = None
-                raise  # Re-raise o erro para ser capturado pelo bloco except principal
+                storage_file_id = None
+                raise
 
-            os.remove(encrypted_archive)
+            os.remove(local_archive)
 
             self.update_progress(7, 'Backup concluído com sucesso!')
 
@@ -238,9 +226,9 @@ class BackupEngine:
             self.db.update_backup_record(
                 backup_id=backup_id,
                 status='SUCCESS',
-                file_name=encrypted_name,
+                file_name=archive_name,
                 file_size=file_size,
-                drive_file_id=drive_file_id,
+                drive_file_id=storage_file_id,
                 end_time=end_time.isoformat(),
                 duration_seconds=duration
             )
@@ -253,9 +241,9 @@ class BackupEngine:
             return {
                 'success': True,
                 'backup_id': backup_id,
-                'file_name': encrypted_name,
+                'file_name': archive_name,
                 'file_size': file_size,
-                'drive_file_id': drive_file_id,
+                'storage_file_id': storage_file_id,
                 'duration': duration
             }
 
@@ -288,8 +276,6 @@ class BackupEngine:
 
             if local_archive and os.path.exists(local_archive):
                 os.remove(local_archive)
-            if encrypted_archive and os.path.exists(encrypted_archive):
-                os.remove(encrypted_archive)
 
             return {
                 'success': False,
