@@ -68,6 +68,17 @@ A Python-based automated backup system for Ubuntu VPS servers with CLI and web d
 **Note**: SSH server credentials are managed through the web interface and stored encrypted in the database.
 
 ## Recent Changes
+- **UI Enhancement: Activity Timeline** (2025-11-09)
+  - Replaced static chart with dynamic Activity Timeline
+  - New features:
+    * Quick metrics: Success rate, Last backup time, Next scheduled backup
+    * Timeline of last 5 backups with visual status indicators
+    * Real-time information with human-readable timestamps
+    * Animated status indicators for active backups
+  - Removed Chart.js dependency (faster page load)
+  - More actionable information at a glance
+  - Better mobile responsiveness
+
 - **Performance: Parallel Compression for Large Backups** (2025-11-09)
   - **MAJOR SPEEDUP**: Added pigz (parallel gzip) support for backups >1GB
   - Automatic detection: Uses pigz if available on VPS, falls back to zip

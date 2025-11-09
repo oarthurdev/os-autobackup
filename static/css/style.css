@@ -971,6 +971,204 @@ body {
     background: var(--border-color-hover);
 }
 
+/* Activity Container */
+.activity-container {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+}
+
+.quick-metrics {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1rem;
+}
+
+.metric-item {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 1rem;
+    background: var(--bg-tertiary);
+    border-radius: var(--radius-md);
+    border: 1px solid var(--border-color);
+    transition: var(--transition);
+}
+
+.metric-item:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-md);
+}
+
+.metric-icon {
+    width: 48px;
+    height: 48px;
+    border-radius: var(--radius-md);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 20px;
+    flex-shrink: 0;
+}
+
+.metric-icon-success {
+    background: rgba(0, 200, 83, 0.1);
+    color: var(--accent-success);
+}
+
+.metric-icon-time {
+    background: rgba(0, 102, 255, 0.1);
+    color: var(--accent-info);
+}
+
+.metric-icon-calendar {
+    background: rgba(255, 149, 0, 0.1);
+    color: var(--accent-warning);
+}
+
+.metric-info {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.metric-label {
+    font-size: 12px;
+    color: var(--text-tertiary);
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.metric-value {
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--text-primary);
+}
+
+/* Activity Timeline */
+.activity-timeline {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.timeline-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 1rem;
+    padding: 1rem;
+    background: var(--bg-tertiary);
+    border-radius: var(--radius-md);
+    border: 1px solid var(--border-color);
+    transition: var(--transition);
+}
+
+.timeline-item:hover {
+    border-color: var(--accent-primary);
+}
+
+.timeline-indicator {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    margin-top: 6px;
+}
+
+.timeline-indicator.success {
+    background: var(--accent-success);
+    box-shadow: 0 0 0 4px rgba(0, 200, 83, 0.15);
+}
+
+.timeline-indicator.failed {
+    background: var(--accent-danger);
+    box-shadow: 0 0 0 4px rgba(255, 59, 48, 0.15);
+}
+
+.timeline-indicator.running {
+    background: var(--accent-info);
+    box-shadow: 0 0 0 4px rgba(0, 122, 255, 0.15);
+    animation: pulse 2s ease-in-out infinite;
+}
+
+.timeline-content {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.timeline-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+}
+
+.timeline-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.timeline-time {
+    font-size: 12px;
+    color: var(--text-tertiary);
+    white-space: nowrap;
+}
+
+.timeline-details {
+    font-size: 13px;
+    color: var(--text-secondary);
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+}
+
+.timeline-detail-item {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+}
+
+.timeline-detail-item i {
+    font-size: 11px;
+    opacity: 0.7;
+}
+
+.timeline-loading {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 2rem;
+    color: var(--text-tertiary);
+}
+
+.timeline-empty {
+    text-align: center;
+    padding: 2rem;
+    color: var(--text-tertiary);
+}
+
+.timeline-empty i {
+    font-size: 48px;
+    opacity: 0.3;
+    margin-bottom: 1rem;
+}
+
+@keyframes pulse {
+    0%, 100% {
+        opacity: 1;
+    }
+    50% {
+        opacity: 0.5;
+    }
+}
+
 /* Responsive */
 @media (max-width: 768px) {
     .header-content {
@@ -993,5 +1191,14 @@ body {
 
     .action-btn span {
         display: none;
+    }
+
+    .quick-metrics {
+        grid-template-columns: 1fr;
+    }
+
+    .timeline-header {
+        flex-direction: column;
+        align-items: flex-start;
     }
 }

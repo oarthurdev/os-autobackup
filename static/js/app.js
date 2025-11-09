@@ -1,8 +1,8 @@
 let logsModal, hostModal, backupModal, scheduleModal;
 let currentHostId = null;
 let currentScheduleId = null;
-let backupChart = null;
 let allBackups = [];
+let allSchedules = [];
 
 document.addEventListener('DOMContentLoaded', function() {
     logsModal = new bootstrap.Modal(document.getElementById('logsModal'));
@@ -12,9 +12,6 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Load theme preference
     loadTheme();
-
-    // Initialize chart
-    initializeChart();
 
     loadStatus();
     loadSSHHosts();
@@ -170,11 +167,6 @@ function toggleTheme() {
     document.documentElement.setAttribute('data-theme', newTheme);
     localStorage.setItem('theme', newTheme);
     updateThemeIcon(newTheme);
-
-    // Update chart colors
-    if (backupChart) {
-        updateChartTheme(newTheme);
-    }
 }
 
 function updateThemeIcon(theme) {
@@ -186,83 +178,132 @@ function updateThemeIcon(theme) {
     }
 }
 
-function initializeChart() {
-    const ctx = document.getElementById('backupChart');
-    const theme = document.documentElement.getAttribute('data-theme');
-    const textColor = theme === 'dark' ? '#eaeaea' : '#212529';
-    const gridColor = theme === 'dark' ? '#2d3561' : '#dee2e6';
+function updateActivityTimeline(backups, schedules) {
+    const timeline = document.getElementById('activityTimeline');
+    
+    // Get recent backups (last 5)
+    const recentBackups = backups.slice(0, 5);
+    
+    if (recentBackups.length === 0) {
+        timeline.innerHTML = `
+            <div class="timeline-empty">
+                <i class="fas fa-inbox"></i>
+                <p>Nenhuma atividade recente</p>
+            </div>
+        `;
+        return;
+    }
+    
+    timeline.innerHTML = recentBackups.map(backup => {
+        const date = new Date(backup.timestamp);
+        const timeAgo = getTimeAgo(date);
+        const statusClass = backup.status === 'SUCCESS' ? 'success' : 'failed';
+        const statusText = backup.status === 'SUCCESS' ? 'Sucesso' : 'Falha';
+        const sizeText = backup.file_size ? formatBytes(backup.file_size) : 'N/A';
+        const durationText = backup.duration_seconds ? `${backup.duration_seconds.toFixed(0)}s` : 'N/A';
+        
+        return `
+            <div class="timeline-item">
+                <div class="timeline-indicator ${statusClass}"></div>
+                <div class="timeline-content">
+                    <div class="timeline-header">
+                        <div class="timeline-title">${backup.file_name || 'Backup #' + backup.id}</div>
+                        <div class="timeline-time">${timeAgo}</div>
+                    </div>
+                    <div class="timeline-details">
+                        <span class="timeline-detail-item">
+                            <i class="fas fa-circle-${statusClass === 'success' ? 'check' : 'xmark'}"></i>
+                            ${statusText}
+                        </span>
+                        <span class="timeline-detail-item">
+                            <i class="fas fa-file-archive"></i>
+                            ${sizeText}
+                        </span>
+                        <span class="timeline-detail-item">
+                            <i class="fas fa-clock"></i>
+                            ${durationText}
+                        </span>
+                    </div>
+                </div>
+            </div>
+        `;
+    }).join('');
+    
+    // Update quick metrics
+    updateQuickMetrics(backups, schedules);
+}
 
-    backupChart = new Chart(ctx, {
-        type: 'line',
-        data: {
-            labels: [],
-            datasets: [{
-                label: 'Tamanho do Backup (MB)',
-                data: [],
-                borderColor: 'rgb(102, 126, 234)',
-                backgroundColor: 'rgba(102, 126, 234, 0.1)',
-                tension: 0.4,
-                fill: true
-            }]
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: true,
-            plugins: {
-                legend: {
-                    labels: {
-                        color: textColor
-                    }
-                }
-            },
-            scales: {
-                y: {
-                    beginAtZero: true,
-                    ticks: {
-                        color: textColor
-                    },
-                    grid: {
-                        color: gridColor
-                    }
-                },
-                x: {
-                    ticks: {
-                        color: textColor
-                    },
-                    grid: {
-                        color: gridColor
-                    }
-                }
-            }
+function updateQuickMetrics(backups, schedules) {
+    // Success rate (last 10 backups)
+    const recent = backups.slice(0, 10);
+    const successRate = recent.length > 0 
+        ? ((recent.filter(b => b.status === 'SUCCESS').length / recent.length) * 100).toFixed(0)
+        : 0;
+    document.getElementById('successRate').textContent = successRate + '%';
+    
+    // Last backup time
+    if (backups.length > 0) {
+        const lastBackup = backups[0];
+        const date = new Date(lastBackup.timestamp);
+        const timeAgo = getTimeAgo(date);
+        document.getElementById('lastBackupTime').textContent = timeAgo;
+    } else {
+        document.getElementById('lastBackupTime').textContent = 'Nunca';
+    }
+    
+    // Next scheduled backup
+    const activeSchedules = schedules.filter(s => s.is_active);
+    if (activeSchedules.length > 0) {
+        // Find the earliest next run
+        const nextSchedule = activeSchedules.reduce((earliest, current) => {
+            const currentNext = current.next_run ? new Date(current.next_run) : new Date(8640000000000000); // Max date
+            const earliestNext = earliest.next_run ? new Date(earliest.next_run) : new Date(8640000000000000);
+            return currentNext < earliestNext ? current : earliest;
+        });
+        
+        if (nextSchedule.next_run) {
+            const nextDate = new Date(nextSchedule.next_run);
+            const timeUntil = getTimeUntil(nextDate);
+            document.getElementById('nextScheduled').textContent = timeUntil;
+        } else {
+            document.getElementById('nextScheduled').textContent = 'Em breve';
         }
-    });
+    } else {
+        document.getElementById('nextScheduled').textContent = 'Nenhum';
+    }
 }
 
-function updateChartTheme(theme) {
-    const textColor = theme === 'dark' ? '#eaeaea' : '#212529';
-    const gridColor = theme === 'dark' ? '#2d3561' : '#dee2e6';
-
-    backupChart.options.plugins.legend.labels.color = textColor;
-    backupChart.options.scales.y.ticks.color = textColor;
-    backupChart.options.scales.y.grid.color = gridColor;
-    backupChart.options.scales.x.ticks.color = textColor;
-    backupChart.options.scales.x.grid.color = gridColor;
-    backupChart.update();
+function getTimeAgo(date) {
+    const now = new Date();
+    const diff = Math.floor((now - date) / 1000); // seconds
+    
+    if (diff < 60) return 'agora mesmo';
+    if (diff < 3600) return `${Math.floor(diff / 60)} min atrás`;
+    if (diff < 86400) return `${Math.floor(diff / 3600)}h atrás`;
+    if (diff < 604800) return `${Math.floor(diff / 86400)}d atrás`;
+    
+    return date.toLocaleDateString('pt-BR');
 }
 
-function updateChart(backups) {
-    const successBackups = backups.filter(b => b.status === 'SUCCESS' && b.file_size).slice(0, 10).reverse();
+function getTimeUntil(date) {
+    const now = new Date();
+    const diff = Math.floor((date - now) / 1000); // seconds
+    
+    if (diff < 0) return 'Atrasado';
+    if (diff < 60) return 'Em instantes';
+    if (diff < 3600) return `Em ${Math.floor(diff / 60)} min`;
+    if (diff < 86400) return `Em ${Math.floor(diff / 3600)}h`;
+    if (diff < 604800) return `Em ${Math.floor(diff / 86400)}d`;
+    
+    return date.toLocaleDateString('pt-BR');
+}
 
-    const labels = successBackups.map(b => {
-        const date = new Date(b.timestamp);
-        return date.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
-    });
-
-    const data = successBackups.map(b => (b.file_size / (1024 * 1024)).toFixed(2));
-
-    backupChart.data.labels = labels;
-    backupChart.data.datasets[0].data = data;
-    backupChart.update();
+function formatBytes(bytes) {
+    if (bytes === 0) return '0 B';
+    const k = 1024;
+    const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return Math.round((bytes / Math.pow(k, i)) * 100) / 100 + ' ' + sizes[i];
 }
 
 function updateStatistics(backups) {
@@ -721,9 +762,9 @@ async function loadBackups() {
         const backups = await response.json();
         allBackups = backups;
 
-        // Update statistics and chart
+        // Update statistics and activity timeline
         updateStatistics(backups);
-        updateChart(backups);
+        updateActivityTimeline(backups, allSchedules);
 
         const tbody = document.getElementById('backupsTable');
 
@@ -936,6 +977,10 @@ async function loadSchedules() {
     try {
         const response = await fetch('/api/schedules');
         const schedules = await response.json();
+        allSchedules = schedules;
+        
+        // Update activity timeline with schedules
+        updateActivityTimeline(allBackups, schedules);
         
         const schedulesTable = document.getElementById('schedulesTable');
         
