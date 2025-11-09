@@ -3,6 +3,8 @@
 ## Project Overview
 A Python-based automated backup system for Ubuntu VPS servers with CLI and web dashboard interfaces. The system performs SSH-based backups, compresses them as ZIP files, and uploads them to Supabase Storage. Now features multi-host management through the web interface.
 
+**Important**: This system was originally designed to schedule complete and general backups of Linux VPS data structures. It can download and complete uploads from the "/" path (root) without issues, but when performing a general VPS backup, it should only backup necessary files from the VPS (excluding temporary files, caches, and system-specific directories).
+
 ## Architecture
 - **Backend**: Flask web server
 - **Database**: SQLite for backup history, logs, SSH host management, and schedules
@@ -66,6 +68,13 @@ A Python-based automated backup system for Ubuntu VPS servers with CLI and web d
 **Note**: SSH server credentials are managed through the web interface and stored encrypted in the database.
 
 ## Recent Changes
+- **Project Import Completed** (2025-11-09)
+  - Successfully migrated project to Replit environment
+  - Installed Python 3.11 and all required dependencies
+  - Flask web server running on port 5000
+  - All functionality verified and working
+  - Project ready for development and enhancements
+
 - **Migration to Supabase Storage and ZIP Format** (2025-11-09)
   - **BREAKING CHANGE**: Migrated from Google Drive to Supabase Storage
   - Changed backup format from TAR.GZ to ZIP for better compatibility
