@@ -110,67 +110,39 @@ class SSHManager:
                 raise ValueError(f"Invalid or unsafe path: {path}")
             validated_paths.append(shlex.quote(path))
 
-            # Estimate total size with same exclusions as tar will use
-            try:
-                exclude_du_str = ' '.join([f"--exclude={shlex.quote(e)}" for e in exclusions])
-                size_cmd = f"du -sb {exclude_du_str} {shlex.quote(path)} 2>/dev/null | cut -f1"
-                stdout_size, stderr_size, exit_status_size = self.execute_command(size_cmd)
-                if exit_status_size == 0:
-                    size_str = stdout_size.strip()
-                    if size_str.isdigit():
-                        total_size += int(size_str)
-                else:
-                    # If 'du' fails for a path, we might still want to proceed but log the issue
-                    if self.logger:
-                        self.logger.warning(f"Could not get size for path '{path}': {stderr_size}")
-            except Exception as e:
-                if self.logger:
-                    self.logger.warning(f"Error estimating size for path '{path}': {e}")
-                # Continue even if size estimation fails for one path
-
         # Use the new method to estimate total size for the progress callback
         total_size = self.get_directory_size(paths)
 
-
         paths_str = ' '.join(validated_paths)
-        remote_temp_dir = '/tmp' # Default temporary directory
+        remote_temp_dir = '/tmp'
         remote_archive_path = f"{remote_temp_dir}/{archive_name}"
 
-        # Use faster compression for files >= 1GB
-        if use_fast_compression is None:
-            use_fast_compression = total_size >= 1073741824  # 1GB
-
-        exclude_str = ' '.join([f"--exclude={shlex.quote(e)}" for e in exclusions])
+        exclude_str = ' '.join([f"-x {shlex.quote(e)}" for e in exclusions])
 
         # Optimize compression level based on file size
-        # For large files (>1GB): use faster compression with pigz
-        # pigz -3 is much faster than default -6 while still giving good compression
-        if total_size >= 5 * 1024 * 1024 * 1024:  # >5GB: very fast compression
-            compression_opts = "pigz -1"  # Fastest compression
-            compression_info = "compressão ultra-rápida"
+        # ZIP compression levels: 0 (no compression) to 9 (best compression)
+        # Level 1-3 for large files (faster), level 6 for smaller files (balanced)
+        if total_size >= 5 * 1024 * 1024 * 1024:  # >5GB: minimal compression
+            compression_level = "1"
+            compression_info = "compressão mínima (mais rápido)"
         elif total_size >= 1 * 1024 * 1024 * 1024:  # >1GB: fast compression
-            compression_opts = "pigz -3"  # Fast compression
+            compression_level = "3"
             compression_info = "compressão rápida"
         else:
-            compression_opts = "pigz"  # Default compression
-            compression_info = "compressão padrão"
+            compression_level = "6"
+            compression_info = "compressão balanceada"
 
-        # Use pigz if available for faster parallel compression, otherwise use gzip
-        tar_command = f"""
-            if command -v pigz &> /dev/null; then
-                tar {exclude_str} -I "{compression_opts}" -cf {shlex.quote(remote_archive_path)} {paths_str} 2>&1
-            else
-                tar {exclude_str} -czf {shlex.quote(remote_archive_path)} {paths_str} 2>&1
-            fi
+        # Use zip command with compression level
+        zip_command = f"""
+            cd / && zip -{compression_level} -r {shlex.quote(remote_archive_path)} {paths_str} {exclude_str} 2>&1
         """
 
         if progress_callback and total_size >= 1073741824:
             progress_callback(f"Tamanho estimado: {total_size / (1024*1024):.2f} MB - usando {compression_info}")
 
-        stdout, stderr, exit_status = self.execute_command(tar_command)
+        stdout, stderr, exit_status = self.execute_command(zip_command)
 
-        if exit_status != 0:
-            # Attempt to provide a more specific error if the path itself was the issue
+        if exit_status != 0 and "nothing to do" not in stderr.lower():
             if "No such file or directory" in stderr:
                 raise Exception(f"Failed to create archive: One or more specified paths do not exist on the server. Details: {stderr}")
             else:
@@ -178,13 +150,12 @@ class SSHManager:
 
         # Verificar o tamanho do arquivo criado
         if progress_callback:
-            # Correctly quote the remote_archive_path for the stat command
             stat_command = f"stat -c%s {shlex.quote(remote_archive_path)} 2>/dev/null"
             stdout_stat, _, exit_status_stat = self.execute_command(stat_command)
             if exit_status_stat == 0:
                 try:
                     archive_size = int(stdout_stat.strip())
-                    progress_callback(f"Arquivo compactado criado: {self._format_bytes(archive_size)}")
+                    progress_callback(f"Arquivo ZIP criado: {self._format_bytes(archive_size)}")
                 except ValueError:
                     if self.logger:
                         self.logger.warning(f"Could not parse archive size: '{stdout_stat.strip()}'")
@@ -192,8 +163,7 @@ class SSHManager:
                 if self.logger:
                     self.logger.warning(f"Could not get archive size for '{remote_archive_path}'.")
 
-
-        return remote_archive_path # Return the full path where the archive was created
+        return remote_archive_path
 
     def _is_safe_path(self, path: str) -> bool:
         # More robust check: disallow empty paths, paths with '..', and paths starting with '-'
@@ -268,20 +238,18 @@ class SSHManager:
         finally:
             sftp.close()
 
-    def download_and_encrypt_streaming(self, remote_path: str, encrypted_local_path: str,
-                                      encryptor, progress_callback=None) -> int:
+    def download_file_streaming(self, remote_path: str, local_path: str,
+                                progress_callback=None) -> int:
         """
-        Download a file from the remote server and encrypt it in streaming mode.
-        This avoids storing the unencrypted file locally.
+        Download a file from the remote server with progress tracking.
 
         Args:
             remote_path: Path to the file on the remote server
-            encrypted_local_path: Path where the encrypted file will be saved locally
-            encryptor: Encryptor instance to use for encryption
+            local_path: Path where the file will be saved locally
             progress_callback: Optional callback function for progress updates
 
         Returns:
-            int: Size of the encrypted file in bytes
+            int: Size of the downloaded file in bytes
         """
         if not self.client:
             raise Exception("Not connected to SSH server")
@@ -298,7 +266,6 @@ class SSHManager:
                 raise Exception(f"Invalid file size for {remote_path}")
             
             # Optimize chunk size based on file size
-            # Larger chunks for larger files reduce I/O overhead significantly
             if file_size > 5 * 1024 * 1024 * 1024:  # > 5GB
                 chunk_size = 8 * 1024 * 1024  # 8MB chunks
             elif file_size > 1 * 1024 * 1024 * 1024:  # > 1GB
@@ -321,45 +288,40 @@ class SSHManager:
                 if hasattr(remote_file, 'prefetch'):
                     remote_file.prefetch(file_size)
                 
-                # Start encryption streaming
-                encryptor.start_encryption_stream(encrypted_local_path)
+                with open(local_path, 'wb') as local_file:
+                    try:
+                        # Read and write in chunks
+                        while True:
+                            chunk = remote_file.read(chunk_size)
+                            if not chunk:
+                                break
 
-                try:
-                    # Read and encrypt in chunks
-                    while True:
-                        chunk = remote_file.read(chunk_size)
-                        if not chunk:
-                            break
+                            local_file.write(chunk)
+                            total_downloaded += len(chunk)
 
-                        encryptor.encrypt_chunk(chunk)
-                        total_downloaded += len(chunk)
+                            # Dynamic progress update frequency based on file size
+                            progress_interval = 50 * 1024 * 1024 if file_size > 5 * 1024 * 1024 * 1024 else 10 * 1024 * 1024
+                            if progress_callback and file_size > 0 and total_downloaded % progress_interval < chunk_size:
+                                percentage = (total_downloaded / file_size) * 100
+                                progress_callback(f"Baixado: {self._format_bytes(total_downloaded)} ({percentage:.1f}%)")
 
-                        # Dynamic progress update frequency based on file size
-                        progress_interval = 50 * 1024 * 1024 if file_size > 5 * 1024 * 1024 * 1024 else 10 * 1024 * 1024
-                        if progress_callback and file_size > 0 and total_downloaded % progress_interval < chunk_size:
-                            percentage = (total_downloaded / file_size) * 100
-                            progress_callback(f"Baixado e criptografado: {self._format_bytes(total_downloaded)} ({percentage:.1f}%)")
+                        if progress_callback:
+                            progress_callback(f"Download concluído: {self._format_bytes(total_downloaded)}")
 
-                    # Finalize encryption
-                    encryptor.finalize_encryption_stream()
+                    except Exception as e:
+                        # Clean up partial file on error
+                        if os.path.exists(local_path):
+                            os.remove(local_path)
+                        raise Exception(f"Error during streaming download: {str(e)}")
 
-                    if progress_callback:
-                        progress_callback(f"Download e criptografia concluídos: {self._format_bytes(total_downloaded)}")
-
-                except Exception as e:
-                    # Clean up partial file on error
-                    if os.path.exists(encrypted_local_path):
-                        os.remove(encrypted_local_path)
-                    raise Exception(f"Error during streaming download/encryption: {str(e)}")
-
-            # Get the size of the encrypted file
-            encrypted_size = os.path.getsize(encrypted_local_path)
-            return encrypted_size
+            # Get the size of the downloaded file
+            file_size_final = os.path.getsize(local_path)
+            return file_size_final
 
         except FileNotFoundError:
             raise FileNotFoundError(f"Remote file not found: {remote_path}")
         except Exception as e:
-            if "streaming download/encryption" not in str(e):
+            if "streaming download" not in str(e):
                 raise Exception(f"Error in streaming download: {str(e)}")
             raise
         finally:
