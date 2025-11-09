@@ -68,6 +68,18 @@ A Python-based automated backup system for Ubuntu VPS servers with CLI and web d
 **Note**: SSH server credentials are managed through the web interface and stored encrypted in the database.
 
 ## Recent Changes
+- **Backup Exclusion System Enhanced** (2025-11-09)
+  - Fixed zip command exclusion syntax for proper filtering
+  - Expanded exclusion list for complete VPS backups:
+    * Virtual filesystems: `/proc`, `/sys`, `/dev`, `/run`, `/tmp`
+    * Mount points: `/mnt`, `/media`, `/snap`
+    * System caches: `/var/cache`, `/var/tmp`, `/var/run`, `/var/lock`
+    * Temporary files: `*.tmp`, `*.cache`, `*.swp`, `*~`
+    * Python caches: `__pycache__`, `.cache`
+  - System now correctly excludes unnecessary files when backing up "/" (root)
+  - Backup includes only essential VPS data (configurations, applications, databases, user data)
+  - Verified Supabase Storage upload is working correctly
+
 - **Project Import Completed** (2025-11-09)
   - Successfully migrated project to Replit environment
   - Installed Python 3.11 and all required dependencies

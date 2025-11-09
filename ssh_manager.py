@@ -100,9 +100,12 @@ class SSHManager:
         # Exclusions for virtual filesystems and unnecessary directories
         # These should be excluded especially when backing up root "/"
         exclusions = [
-            '/proc', '/sys', '/dev', '/run', '/tmp',
-            '/mnt', '/media', '/lost+found', '/snap',
-            '*/cache/*', '*/Cache/*', '*/temp/*', '*/Temp/*'
+            '/proc/*', '/sys/*', '/dev/*', '/run/*', '/tmp/*',
+            '/mnt/*', '/media/*', '/lost+found/*', '/snap/*',
+            '/var/cache/*', '/var/tmp/*', '/var/run/*',
+            '/var/lock/*', '/swapfile',
+            '*.cache', '*.tmp', '*~', '*.swp', '*.swo',
+            '__pycache__/*', '.cache/*', '.tmp/*'
         ]
 
         for path in paths:
@@ -117,7 +120,10 @@ class SSHManager:
         remote_temp_dir = '/tmp'
         remote_archive_path = f"{remote_temp_dir}/{archive_name}"
 
-        exclude_str = ' '.join([f"-x {shlex.quote(e)}" for e in exclusions])
+        # Build exclusion string with proper zip syntax
+        # zip expects: -x "pattern1" "pattern2" ...
+        exclude_parts = ' '.join([f'"{e}"' for e in exclusions])
+        exclude_str = f'-x {exclude_parts}' if exclusions else ''
 
         # Optimize compression level based on file size
         # ZIP compression levels: 0 (no compression) to 9 (best compression)
