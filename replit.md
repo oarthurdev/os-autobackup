@@ -68,6 +68,14 @@ A Python-based automated backup system for Ubuntu VPS servers with CLI and web d
 **Note**: SSH server credentials are managed through the web interface and stored encrypted in the database.
 
 ## Recent Changes
+- **Fixed Backup Size Estimation** (2025-11-09)
+  - **CRITICAL FIX**: Corrected massive size estimation bug for "/" backups
+  - Previously: Virtual filesystems (/proc, /sys, /dev) caused estimates of ~687TB
+  - Now: Size estimation excludes same directories as backup (accurate estimates)
+  - Modified `get_directory_size()` to use `du --exclude` for virtual filesystems
+  - Increased timeout from 30s to 60s for large directory scans
+  - Size estimation now reflects actual backup size accurately
+
 - **Backup Exclusion System Enhanced** (2025-11-09)
   - Fixed zip command exclusion syntax for proper filtering
   - Expanded exclusion list for complete VPS backups:

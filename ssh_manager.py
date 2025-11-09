@@ -76,19 +76,25 @@ class SSHManager:
         return stdout.read().decode('utf-8'), stderr.read().decode('utf-8'), exit_status
 
     def get_directory_size(self, paths: list) -> int:
-        """Estima o tamanho total dos diretórios a serem backupeados."""
+        """Estima o tamanho total dos diretórios a serem backupeados, excluindo diretórios virtuais."""
         try:
+            # Diretórios a excluir da estimativa (mesmos que serão excluídos do backup)
+            exclude_dirs = [
+                'proc', 'sys', 'dev', 'run', 'tmp',
+                'mnt', 'media', 'lost+found', 'snap',
+                'var/cache', 'var/tmp', 'var/run', 'var/lock'
+            ]
+            
+            # Construir exclusões para o comando du
+            exclude_str = ' '.join([f'--exclude="{d}"' for d in exclude_dirs])
+            
             paths_str = ' '.join([f'"{p}"' for p in paths])
-            command = f'du -sb {paths_str} | awk \'{{sum+=$1}} END {{print sum}}\''
+            command = f'du -sb {exclude_str} {paths_str} 2>/dev/null | awk \'{{sum+=$1}} END {{print sum}}\''
 
-            stdin, stdout, stderr = self.client.exec_command(command, timeout=30)
+            stdin, stdout, stderr = self.client.exec_command(command, timeout=60)
             output = stdout.read().decode().strip()
-            error = stderr.read().decode().strip()
 
-            if error and 'cannot access' not in error.lower():
-                raise Exception(f"Error estimating size: {error}")
-
-            return int(output) if output.isdigit() else 0
+            return int(output) if output and output.isdigit() else 0
         except Exception as e:
             # Se falhar, retornar 0 (sem estimativa)
             return 0
