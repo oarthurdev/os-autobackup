@@ -1,6 +1,48 @@
 import os
+import time
 from supabase import create_client, Client
 from config import Config
+
+
+class ProgressFileWrapper:
+    """Wrapper para file handle que reporta progresso durante leitura"""
+    def __init__(self, file_handle, file_size, progress_callback=None):
+        self.file_handle = file_handle
+        self.file_size = file_size
+        self.progress_callback = progress_callback
+        self.bytes_read = 0
+        self.last_reported_progress = 0
+        
+    def read(self, size=-1):
+        """Lê dados e reporta progresso"""
+        data = self.file_handle.read(size)
+        self.bytes_read += len(data)
+        
+        if self.progress_callback and self.file_size > 0:
+            progress = (self.bytes_read / self.file_size) * 100
+            
+            # Reportar progresso a cada 5% para não sobrecarregar
+            if progress - self.last_reported_progress >= 5 or self.bytes_read == self.file_size:
+                self.progress_callback(
+                    f"Enviando: {progress:.1f}% ({self.bytes_read / (1024*1024):.2f}/{self.file_size / (1024*1024):.2f} MB)"
+                )
+                self.last_reported_progress = progress
+        
+        return data
+    
+    def seek(self, offset, whence=0):
+        """Implementar seek para compatibilidade"""
+        return self.file_handle.seek(offset, whence)
+    
+    def tell(self):
+        """Implementar tell para compatibilidade"""
+        return self.file_handle.tell()
+    
+    def __enter__(self):
+        return self
+    
+    def __exit__(self, *args):
+        return self.file_handle.__exit__(*args)
 
 class SupabaseStorageManager:
     def __init__(self):
@@ -22,9 +64,9 @@ class SupabaseStorageManager:
         except Exception as e:
             print(f"Erro ao verificar/criar bucket: {e}")
 
-    def upload_file(self, file_path: str, file_name: str = None, progress_callback=None) -> str:
+    def upload_file(self, file_path: str, file_name: str | None = None, progress_callback=None) -> str:
         """
-        Faz upload de um arquivo para o Supabase Storage com progresso
+        Faz upload de um arquivo para o Supabase Storage usando streaming
         
         Args:
             file_path: Caminho do arquivo local
@@ -34,7 +76,8 @@ class SupabaseStorageManager:
         Returns:
             str: ID/caminho do arquivo no storage
         """
-        if not file_name:
+        # Garantir que file_name sempre tem um valor
+        if file_name is None:
             file_name = os.path.basename(file_path)
 
         # Determine content type based on file extension
@@ -45,46 +88,69 @@ class SupabaseStorageManager:
         else:
             content_type = "application/octet-stream"
 
-        try:
-            # Obter tamanho do arquivo
-            file_size = os.path.getsize(file_path)
-            
-            if progress_callback:
-                progress_callback(f"Iniciando leitura de {file_size / (1024*1024):.2f} MB do disco...")
-            
-            # Ler arquivo em chunks para não bloquear muito tempo
-            file_data = bytearray()
-            chunk_size = 10 * 1024 * 1024  # 10MB chunks
-            bytes_read = 0
-            
-            with open(file_path, 'rb') as f:
-                while True:
-                    chunk = f.read(chunk_size)
-                    if not chunk:
-                        break
-                    file_data.extend(chunk)
-                    bytes_read += len(chunk)
-                    
+        # Obter tamanho do arquivo
+        file_size = os.path.getsize(file_path)
+        
+        # Configurações de retry para arquivos grandes
+        max_retries = 3
+        retry_delay = 5  # segundos
+        
+        for attempt in range(max_retries):
+            try:
+                if progress_callback:
+                    if attempt > 0:
+                        progress_callback(f"Tentativa {attempt + 1}/{max_retries}: Retomando upload de {file_size / (1024*1024):.2f} MB...")
+                    else:
+                        progress_callback(f"Iniciando upload de {file_size / (1024*1024):.2f} MB para Supabase Storage...")
+                
+                # SOLUÇÃO: Upload em streaming com callback de progresso
+                # O SDK do Supabase vai fazer streaming automaticamente sem carregar tudo na memória
+                with open(file_path, 'rb') as f:
+                    # Usar wrapper para monitorar progresso durante o upload se callback fornecido
                     if progress_callback:
-                        progress = (bytes_read / file_size) * 100
-                        progress_callback(f"Lendo arquivo: {progress:.1f}% ({bytes_read / (1024*1024):.2f}/{file_size / (1024*1024):.2f} MB)")
-            
-            if progress_callback:
-                progress_callback(f"Enviando {file_size / (1024*1024):.2f} MB para Supabase Storage...")
-            
-            # Fazer upload
-            response = self.client.storage.from_(self.bucket_name).upload(
-                file_name,
-                bytes(file_data),
-                file_options={"content-type": content_type}
-            )
-            
-            if progress_callback:
-                progress_callback(f"Upload concluído: {file_name}")
-            
-            return file_name
-        except Exception as e:
-            raise Exception(f"Erro ao fazer upload para Supabase Storage: {str(e)}")
+                        file_wrapper = ProgressFileWrapper(f, file_size, progress_callback)
+                        # Type ignore pois wrapper implementa interface file-like necessária
+                        response = self.client.storage.from_(self.bucket_name).upload(
+                            file_name,
+                            file_wrapper,  # type: ignore - Wrapper implementa read/seek/tell
+                            file_options={"content-type": content_type}
+                        )
+                    else:
+                        # Sem callback, usar file handle direto
+                        response = self.client.storage.from_(self.bucket_name).upload(
+                            file_name,
+                            f,  # File handle - SDK faz streaming automaticamente
+                            file_options={"content-type": content_type}
+                        )
+                
+                if progress_callback:
+                    progress_callback(f"Upload concluído: {file_name} ({file_size / (1024*1024):.2f} MB)")
+                
+                return file_name
+                
+            except Exception as e:
+                error_msg = str(e)
+                
+                # Se for a última tentativa, lançar erro
+                if attempt == max_retries - 1:
+                    raise Exception(f"Erro ao fazer upload para Supabase Storage após {max_retries} tentativas: {error_msg}")
+                
+                # Caso contrário, aguardar e tentar novamente
+                if progress_callback:
+                    wait_time = retry_delay * (attempt + 1)  # Backoff exponencial
+                    progress_callback(f"Erro temporário no upload: {error_msg}. Aguardando {wait_time}s antes de tentar novamente...")
+                
+                time.sleep(retry_delay * (attempt + 1))
+                
+                # Se o arquivo já existe de uma tentativa anterior, tentar remover
+                try:
+                    self.client.storage.from_(self.bucket_name).remove([file_name])
+                except:
+                    pass  # Ignorar erro se arquivo não existir
+        
+        # Este ponto nunca deve ser alcançado (loop sempre retorna ou lança exceção)
+        # mas é necessário para satisfazer o type checker
+        raise Exception("Falha inesperada no upload - todas as tentativas foram esgotadas")
 
     def get_file_url(self, file_name: str) -> str:
         """
