@@ -68,6 +68,18 @@ A Python-based automated backup system for Ubuntu VPS servers with CLI and web d
 **Note**: SSH server credentials are managed through the web interface and stored encrypted in the database.
 
 ## Recent Changes
+- **Critical Fix: Remote File Cleanup** (2025-11-09)
+  - Fixed order of operations to ensure proper cleanup
+  - **New behavior**:
+    1. Create archive on VPS
+    2. Download via streaming
+    3. Upload to Supabase Storage
+    4. **Delete remote file** (moved to after upload)
+    5. Delete local file
+  - **Error handling**: Remote file is deleted even if upload fails
+  - Prevents orphaned files on VPS
+  - Better error logging for cleanup failures
+
 - **UI Enhancement: Activity Timeline** (2025-11-09)
   - Replaced static chart with dynamic Activity Timeline
   - New features:

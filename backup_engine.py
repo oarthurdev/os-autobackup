@@ -193,19 +193,14 @@ class BackupEngine:
             self.logger.info(f"Download completed ({file_size} bytes)")
             self.db.add_log(backup_id, 'INFO', f'Downloaded {file_size} bytes')
 
-            self.update_progress(5, 'Limpando arquivos temporários no servidor...')
-            self.logger.info("Cleaning up remote archive")
-            ssh_manager.remove_remote_file(remote_archive)
-            ssh_manager.disconnect()
-
-            self.update_progress(6, 'Enviando para Supabase Storage...')
+            self.update_progress(5, 'Enviando para Supabase Storage...')
             self.logger.info("Uploading to Supabase Storage...")
             self.db.add_log(backup_id, 'INFO', 'Uploading to Supabase Storage')
 
             storage_manager = SupabaseStorageManager()
             try:
                 self.logger.info("Uploading to Supabase Storage...")
-                self.update_progress(6, 'Enviando para Supabase Storage...', estimated_size_mb)
+                self.update_progress(5, 'Enviando para Supabase Storage...', estimated_size_mb)
                 storage_file_id = storage_manager.upload_file(local_archive, archive_name)
                 self.logger.info(f"Upload completed. File: {storage_file_id}")
                 self.db.add_log(backup_id, 'INFO', f'Upload completed: {storage_file_id}')
@@ -214,11 +209,41 @@ class BackupEngine:
                 self.logger.error(error_msg)
                 self.db.add_log(backup_id, 'ERROR', error_msg)
                 storage_file_id = None
+                # Clean up remote file on upload failure
+                try:
+                    self.logger.info("Cleaning up remote archive after upload failure")
+                    ssh_manager.remove_remote_file(remote_archive)
+                except Exception as cleanup_error:
+                    self.logger.warning(f"Failed to cleanup remote file: {cleanup_error}")
                 raise
 
-            os.remove(local_archive)
+            # Upload successful - now clean up remote and local files
+            self.update_progress(6, 'Limpando arquivos temporários...')
+            
+            # Remove remote file first
+            try:
+                self.logger.info("Cleaning up remote archive")
+                ssh_manager.remove_remote_file(remote_archive)
+                self.db.add_log(backup_id, 'INFO', 'Remote archive deleted')
+            except Exception as e:
+                self.logger.warning(f"Failed to remove remote archive: {e}")
+                self.db.add_log(backup_id, 'WARNING', f'Failed to delete remote file: {e}')
+            
+            # Disconnect SSH
+            try:
+                ssh_manager.disconnect()
+            except:
+                pass
+            
+            # Remove local file
+            try:
+                os.remove(local_archive)
+                self.logger.info("Local archive deleted")
+            except Exception as e:
+                self.logger.warning(f"Failed to remove local archive: {e}")
 
             self.update_progress(7, 'Backup concluído com sucesso!')
+            self.logger.info("All cleanup completed successfully")
 
             end_time = datetime.now()
             duration = (end_time - start_time).total_seconds()
@@ -266,16 +291,27 @@ class BackupEngine:
                 duration_seconds=duration
             )
 
+            # Clean up on error
             if ssh_manager:
                 try:
                     if remote_archive:
+                        self.logger.info("Cleaning up remote archive after error")
                         ssh_manager.remove_remote_file(remote_archive)
+                        self.db.add_log(backup_id, 'INFO', 'Remote archive deleted (error cleanup)')
+                except Exception as cleanup_error:
+                    self.logger.warning(f"Failed to cleanup remote file after error: {cleanup_error}")
+                
+                try:
                     ssh_manager.disconnect()
                 except:
                     pass
 
             if local_archive and os.path.exists(local_archive):
-                os.remove(local_archive)
+                try:
+                    os.remove(local_archive)
+                    self.logger.info("Local archive deleted (error cleanup)")
+                except Exception as cleanup_error:
+                    self.logger.warning(f"Failed to cleanup local file after error: {cleanup_error}")
 
             return {
                 'success': False,
