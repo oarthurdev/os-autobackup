@@ -4,9 +4,6 @@ let currentScheduleId = null;
 let allBackups = [];
 let allSchedules = [];
 
-// Global state for the tree viewer
-let selectedHostId = null;
-
 document.addEventListener('DOMContentLoaded', function() {
     logsModal = new bootstrap.Modal(document.getElementById('logsModal'));
     hostModal = new bootstrap.Modal(document.getElementById('hostModal'));
@@ -19,7 +16,7 @@ document.addEventListener('DOMContentLoaded', function() {
     loadTheme();
 
     loadStatus();
-    loadSSHHosts(); // Modified to load SSH hosts in tree view
+    loadSSHHosts();
     loadBackups();
     loadSchedules();
     loadRetentionStats();
@@ -35,9 +32,9 @@ async function loadRetentionStats() {
     try {
         const response = await fetch('/api/retention-policy/stats');
         const stats = await response.json();
-
+        
         const container = document.getElementById('retentionStats');
-
+        
         if (!stats.policy) {
             container.innerHTML = `
                 <div class="text-center text-muted py-3">
@@ -50,12 +47,12 @@ async function loadRetentionStats() {
             `;
             return;
         }
-
+        
         const policy = stats.policy;
-        const policyText = policy.policy_type === 'count'
+        const policyText = policy.policy_type === 'count' 
             ? `Manter ${policy.retention_count} backups mais recentes`
             : `Manter backups de ${policy.retention_days} dias`;
-
+        
         container.innerHTML = `
             <div class="retention-info">
                 <div class="retention-stat-grid">
@@ -68,7 +65,7 @@ async function loadRetentionStats() {
                             <div class="retention-stat-value">${stats.total_backups}</div>
                         </div>
                     </div>
-
+                    
                     <div class="retention-stat-item">
                         <div class="retention-stat-icon retention-icon-size">
                             <i class="fas fa-hdd"></i>
@@ -78,7 +75,7 @@ async function loadRetentionStats() {
                             <div class="retention-stat-value">${formatBytes(stats.total_size)}</div>
                         </div>
                     </div>
-
+                    
                     <div class="retention-stat-item">
                         <div class="retention-stat-icon retention-icon-remove">
                             <i class="fas fa-trash"></i>
@@ -88,7 +85,7 @@ async function loadRetentionStats() {
                             <div class="retention-stat-value">${stats.backups_to_remove}</div>
                         </div>
                     </div>
-
+                    
                     <div class="retention-stat-item">
                         <div class="retention-stat-icon retention-icon-free">
                             <i class="fas fa-arrow-down"></i>
@@ -99,14 +96,14 @@ async function loadRetentionStats() {
                         </div>
                     </div>
                 </div>
-
+                
                 <div class="retention-policy-info">
                     <div class="alert alert-info mb-3">
                         <i class="fas fa-info-circle"></i>
                         <strong>Política Ativa:</strong> ${policyText}
                         ${policy.auto_cleanup ? ' (Limpeza automática habilitada)' : ''}
                     </div>
-
+                    
                     ${stats.backups_to_remove > 0 ? `
                         <button class="action-btn action-btn-danger w-100" onclick="applyRetentionNow()">
                             <i class="fas fa-trash-alt"></i> Remover ${stats.backups_to_remove} Backup(s) Agora
@@ -128,13 +125,13 @@ async function showRetentionModal() {
     try {
         const response = await fetch('/api/retention-policy');
         const policy = await response.json();
-
+        
         document.getElementById('retentionEnabled').checked = policy.enabled !== 0;
         document.getElementById('policyType').value = policy.policy_type || 'count';
         document.getElementById('retentionCount').value = policy.retention_count || 10;
         document.getElementById('retentionDays').value = policy.retention_days || 30;
         document.getElementById('autoCleanup').checked = policy.auto_cleanup !== 0;
-
+        
         toggleRetentionFields();
         retentionModal.show();
     } catch (error) {
@@ -147,7 +144,7 @@ function toggleRetentionFields() {
     const policyType = document.getElementById('policyType').value;
     const countField = document.getElementById('countField');
     const daysField = document.getElementById('daysField');
-
+    
     if (policyType === 'count') {
         countField.classList.remove('d-none');
         daysField.classList.add('d-none');
@@ -173,16 +170,16 @@ async function saveRetentionPolicy() {
         retention_days: parseInt(document.getElementById('retentionDays').value),
         auto_cleanup: document.getElementById('autoCleanup').checked
     };
-
+    
     try {
         const response = await fetch('/api/retention-policy', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify(policy)
         });
-
+        
         const result = await response.json();
-
+        
         if (result.success) {
             showSuccess('Política de retenção salva com sucesso!');
             retentionModal.hide();
@@ -201,18 +198,18 @@ async function applyRetentionNow() {
         'Aplicar Política de Retenção',
         'Deseja remover os backups antigos agora? Esta ação não pode ser desfeita.'
     );
-
+    
     if (!confirmed) return;
-
+    
     showInfo('Aplicando política de retenção...');
-
+    
     try {
         const response = await fetch('/api/retention-policy/apply', {
             method: 'POST'
         });
-
+        
         const result = await response.json();
-
+        
         if (result.success) {
             showSuccess(`${result.removed_count} backup(s) removido(s). ${formatBytes(result.freed_space)} liberados!`);
             loadRetentionStats();
@@ -299,7 +296,7 @@ function showConfirm(title, message, onConfirm, onCancel) {
     return new Promise((resolve) => {
         const overlay = document.createElement('div');
         overlay.className = 'confirm-overlay';
-
+        
         overlay.innerHTML = `
             <div class="confirm-modal">
                 <div class="confirm-icon">
@@ -319,15 +316,15 @@ function showConfirm(title, message, onConfirm, onCancel) {
                 </div>
             </div>
         `;
-
+        
         document.body.appendChild(overlay);
-
+        
         // Trigger animation
         setTimeout(() => overlay.classList.add('show'), 10);
-
+        
         const cancelBtn = overlay.querySelector('.btn-confirm-cancel');
         const okBtn = overlay.querySelector('.btn-confirm-ok');
-
+        
         const closeModal = (confirmed) => {
             overlay.classList.remove('show');
             setTimeout(() => {
@@ -337,15 +334,15 @@ function showConfirm(title, message, onConfirm, onCancel) {
                 if (!confirmed && onCancel) onCancel();
             }, 300);
         };
-
+        
         cancelBtn.onclick = () => closeModal(false);
         okBtn.onclick = () => closeModal(true);
-
+        
         // Close on overlay click
         overlay.onclick = (e) => {
             if (e.target === overlay) closeModal(false);
         };
-
+        
         // Close on ESC key
         const escHandler = (e) => {
             if (e.key === 'Escape') {
@@ -382,10 +379,10 @@ function updateThemeIcon(theme) {
 
 function updateActivityTimeline(backups, schedules) {
     const timeline = document.getElementById('activityTimeline');
-
+    
     // Get recent backups (last 5)
     const recentBackups = backups.slice(0, 5);
-
+    
     if (recentBackups.length === 0) {
         timeline.innerHTML = `
             <div class="timeline-empty">
@@ -395,7 +392,7 @@ function updateActivityTimeline(backups, schedules) {
         `;
         return;
     }
-
+    
     timeline.innerHTML = recentBackups.map(backup => {
         const date = new Date(backup.timestamp);
         const timeAgo = getTimeAgo(date);
@@ -403,7 +400,7 @@ function updateActivityTimeline(backups, schedules) {
         const statusText = backup.status === 'SUCCESS' ? 'Sucesso' : 'Falha';
         const sizeText = backup.file_size ? formatBytes(backup.file_size) : 'N/A';
         const durationText = backup.duration_seconds ? `${backup.duration_seconds.toFixed(0)}s` : 'N/A';
-
+        
         return `
             <div class="timeline-item">
                 <div class="timeline-indicator ${statusClass}"></div>
@@ -430,7 +427,7 @@ function updateActivityTimeline(backups, schedules) {
             </div>
         `;
     }).join('');
-
+    
     // Update quick metrics
     updateQuickMetrics(backups, schedules);
 }
@@ -438,11 +435,11 @@ function updateActivityTimeline(backups, schedules) {
 function updateQuickMetrics(backups, schedules) {
     // Success rate (last 10 backups)
     const recent = backups.slice(0, 10);
-    const successRate = recent.length > 0
+    const successRate = recent.length > 0 
         ? ((recent.filter(b => b.status === 'SUCCESS').length / recent.length) * 100).toFixed(0)
         : 0;
     document.getElementById('successRate').textContent = successRate + '%';
-
+    
     // Last backup time
     if (backups.length > 0) {
         const lastBackup = backups[0];
@@ -452,7 +449,7 @@ function updateQuickMetrics(backups, schedules) {
     } else {
         document.getElementById('lastBackupTime').textContent = 'Nunca';
     }
-
+    
     // Next scheduled backup
     const activeSchedules = schedules.filter(s => s.is_active);
     if (activeSchedules.length > 0) {
@@ -462,7 +459,7 @@ function updateQuickMetrics(backups, schedules) {
             const earliestNext = earliest.next_run ? new Date(earliest.next_run) : new Date(8640000000000000);
             return currentNext < earliestNext ? current : earliest;
         });
-
+        
         if (nextSchedule.next_run) {
             const nextDate = new Date(nextSchedule.next_run);
             const timeUntil = getTimeUntil(nextDate);
@@ -478,25 +475,25 @@ function updateQuickMetrics(backups, schedules) {
 function getTimeAgo(date) {
     const now = new Date();
     const diff = Math.floor((now - date) / 1000); // seconds
-
+    
     if (diff < 60) return 'agora mesmo';
     if (diff < 3600) return `${Math.floor(diff / 60)} min atrás`;
     if (diff < 86400) return `${Math.floor(diff / 3600)}h atrás`;
     if (diff < 604800) return `${Math.floor(diff / 86400)}d atrás`;
-
+    
     return date.toLocaleDateString('pt-BR');
 }
 
 function getTimeUntil(date) {
     const now = new Date();
     const diff = Math.floor((date - now) / 1000); // seconds
-
+    
     if (diff < 0) return 'Atrasado';
     if (diff < 60) return 'Em instantes';
     if (diff < 3600) return `Em ${Math.floor(diff / 60)} min`;
     if (diff < 86400) return `Em ${Math.floor(diff / 3600)}h`;
     if (diff < 604800) return `Em ${Math.floor(diff / 86400)}d`;
-
+    
     return date.toLocaleDateString('pt-BR');
 }
 
@@ -538,205 +535,109 @@ function animateValue(id, start, end, duration) {
     }, 16);
 }
 
-// Load SSH hosts in tree view
 async function loadSSHHosts() {
     try {
         const response = await fetch('/api/ssh-hosts');
         const hosts = await response.json();
 
-        const hostsTree = document.getElementById('hostsTree');
+        const treeContainer = document.getElementById('sshHostsTree');
 
         if (hosts.length === 0) {
-            hostsTree.innerHTML = `
-                <div class="empty-state">
-                    <i class="fas fa-server fa-2x mb-2"></i>
-                    <p style="font-size: 12px;">Nenhum servidor configurado</p>
+            treeContainer.innerHTML = `
+                <div class="tree-empty">
+                    <i class="fas fa-server"></i>
+                    <p>Nenhum servidor cadastrado</p>
+                    <p>Clique em "Adicionar Servidor" para começar</p>
                 </div>
             `;
             return;
         }
 
-        hostsTree.innerHTML = hosts.map(host => {
-            const statusClass = host.connection_status?.startsWith('SUCCESS') ? 'success' :
-                               host.connection_status?.startsWith('FAILED') ? 'failed' : 'unknown';
+        treeContainer.innerHTML = hosts.map(host => {
+            const statusClass = host.connection_status?.startsWith('SUCCESS') 
+                ? 'status-connected' 
+                : host.connection_status?.startsWith('FAILED') 
+                ? 'status-failed' 
+                : 'status-unknown';
+
+            const statusText = host.connection_status?.startsWith('SUCCESS') 
+                ? 'Conectado' 
+                : host.connection_status?.startsWith('FAILED') 
+                ? 'Falhou' 
+                : 'Não testado';
+
+            const authType = host.auth_type === 'password' ? 'Senha' : 'Chave SSH';
+            const paths = host.backup_paths.split(',').map(p => p.trim()).filter(p => p);
 
             return `
-                <div class="tree-item ${selectedHostId === host.id ? 'active' : ''}"
-                     onclick="selectHost(${host.id})"
-                     data-host-id="${host.id}">
-                    <i class="fas fa-server"></i>
-                    <span>${host.name}</span>
-                    <span class="status-dot ${statusClass}"></span>
+                <div class="tree-node">
+                    <div class="tree-node-item">
+                        <div class="tree-node-content" onclick="toggleTreeNode(this)">
+                            <i class="fas fa-chevron-down tree-node-icon"></i>
+                            <div class="tree-node-info">
+                                <div class="tree-node-title">
+                                    <i class="fas fa-server"></i>
+                                    ${host.name}
+                                </div>
+                                <div class="tree-node-subtitle">
+                                    ${host.username}@${host.host}:${host.port} • ${authType}
+                                </div>
+                            </div>
+                            <span class="tree-node-status ${statusClass}">${statusText}</span>
+                            <div class="tree-node-actions" onclick="event.stopPropagation()">
+                                <button class="btn-test" onclick="testConnection(${host.id})" title="Testar Conexão">
+                                    <i class="fas fa-plug"></i> Testar
+                                </button>
+                                <button class="btn-edit" onclick="showEditHostModal(${host.id})" title="Editar">
+                                    <i class="fas fa-edit"></i> Editar
+                                </button>
+                                <button class="btn-delete" onclick="deleteHost(${host.id})" title="Excluir">
+                                    <i class="fas fa-trash"></i> Excluir
+                                </button>
+                            </div>
+                        </div>
+                        <div class="tree-node-children">
+                            <div class="tree-child-item">
+                                <i class="fas fa-info-circle"></i>
+                                <strong>Detalhes de Conexão</strong>
+                            </div>
+                            <div class="tree-child-item">
+                                <i class="fas fa-globe"></i>
+                                Host: ${host.host}
+                            </div>
+                            <div class="tree-child-item">
+                                <i class="fas fa-ethernet"></i>
+                                Porta: ${host.port}
+                            </div>
+                            <div class="tree-child-item">
+                                <i class="fas fa-user"></i>
+                                Usuário: ${host.username}
+                            </div>
+                            <div class="tree-child-item">
+                                <i class="fas fa-key"></i>
+                                Autenticação: ${authType}
+                            </div>
+                            ${paths.length > 0 ? `
+                                <div class="tree-child-item">
+                                    <i class="fas fa-folder"></i>
+                                    <strong>Caminhos de Backup (${paths.length})</strong>
+                                </div>
+                                ${paths.map(path => `
+                                    <div class="tree-child-item" style="padding-left: 36px">
+                                        <i class="fas fa-folder-open"></i>
+                                        ${path}
+                                    </div>
+                                `).join('')}
+                            ` : ''}
+                        </div>
+                    </div>
                 </div>
             `;
         }).join('');
-
-        // Auto-select first host if none selected
-        if (!selectedHostId && hosts.length > 0) {
-            selectHost(hosts[0].id);
-        } else if (selectedHostId) {
-            loadHostDetails(selectedHostId);
-        }
-
     } catch (error) {
         console.error('Error loading SSH hosts:', error);
     }
 }
-
-// Select host and show details
-async function selectHost(hostId) {
-    selectedHostId = hostId;
-
-    // Update tree selection
-    document.querySelectorAll('.tree-item').forEach(item => {
-        item.classList.remove('active');
-    });
-    document.querySelector(`[data-host-id="${hostId}"]`)?.classList.add('active');
-
-    // Load details and stats
-    await loadHostDetails(hostId);
-    await loadHostStats(hostId);
-}
-
-// Load host details in center panel
-async function loadHostDetails(hostId) {
-    try {
-        const response = await fetch('/api/ssh-hosts');
-        const hosts = await response.json();
-        const host = hosts.find(h => h.id === hostId);
-
-        if (!host) return;
-
-        const detailsDiv = document.getElementById('hostDetails');
-        detailsDiv.innerHTML = `
-            <div class="host-info-grid">
-                <div class="info-item">
-                    <label><i class="fas fa-tag"></i> Nome</label>
-                    <div class="value">${host.name}</div>
-                </div>
-                <div class="info-item">
-                    <label><i class="fas fa-globe"></i> Host</label>
-                    <div class="value">${host.host}</div>
-                </div>
-                <div class="info-item">
-                    <label><i class="fas fa-network-wired"></i> Porta</label>
-                    <div class="value">${host.port}</div>
-                </div>
-                <div class="info-item">
-                    <label><i class="fas fa-user"></i> Usuário</label>
-                    <div class="value">${host.username}</div>
-                </div>
-                <div class="info-item">
-                    <label><i class="fas fa-key"></i> Autenticação</label>
-                    <div class="value">${host.auth_type === 'password' ? 'Senha' : 'Chave SSH'}</div>
-                </div>
-                <div class="info-item">
-                    <label><i class="fas fa-clock"></i> Última Atualização</label>
-                    <div class="value">${new Date(host.updated_at).toLocaleString('pt-BR')}</div>
-                </div>
-            </div>
-
-            <div class="info-item" style="grid-column: 1 / -1;">
-                <label><i class="fas fa-folder"></i> Caminhos de Backup</label>
-                <div class="value">${host.backup_paths}</div>
-            </div>
-
-            ${host.connection_status ? `
-                <div class="info-item" style="grid-column: 1 / -1; margin-top: 10px;">
-                    <label><i class="fas fa-plug"></i> Status da Conexão</label>
-                    <div class="value">
-                        <span class="badge ${host.connection_status.startsWith('SUCCESS') ? 'bg-success' : 'bg-danger'}">
-                            ${host.connection_status}
-                        </span>
-                    </div>
-                </div>
-            ` : ''}
-
-            <div class="host-actions">
-                <button class="btn btn-primary btn-modern" onclick="testConnection(${host.id})">
-                    <i class="fas fa-plug"></i> Testar Conexão
-                </button>
-                <button class="btn btn-success btn-modern" onclick="startBackup(${host.id})">
-                    <i class="fas fa-play"></i> Iniciar Backup
-                </button>
-                <button class="btn btn-info btn-modern" onclick="editHost(${host.id})">
-                    <i class="fas fa-edit"></i> Editar
-                </button>
-                <button class="btn btn-danger btn-modern" onclick="deleteHost(${host.id})">
-                    <i class="fas fa-trash"></i> Deletar
-                </button>
-            </div>
-        `;
-
-    } catch (error) {
-        console.error('Error loading host details:', error);
-    }
-}
-
-// Load host statistics in right panel
-async function loadHostStats(hostId) {
-    try {
-        const [backupsResponse, schedulesResponse] = await Promise.all([
-            fetch('/api/backups?limit=1000'),
-            fetch('/api/schedules')
-        ]);
-
-        const backups = await backupsResponse.json();
-        const schedules = await schedulesResponse.json();
-
-        // Filter backups for this host (you'll need to add host_id to backups table)
-        const totalBackups = backups.length;
-        const successfulBackups = backups.filter(b => b.status === 'SUCCESS').length;
-        const failedBackups = backups.filter(b => b.status === 'FAILED').length;
-
-        // Filter schedules for this host
-        const hostSchedules = schedules.filter(s => s.ssh_host_id === hostId);
-        const activeSchedules = hostSchedules.filter(s => s.is_active).length;
-
-        // Calculate total size
-        const totalSize = backups
-            .filter(b => b.file_size)
-            .reduce((sum, b) => sum + b.file_size, 0);
-        const totalSizeGB = (totalSize / (1024 * 1024 * 1024)).toFixed(2);
-
-        const statsDiv = document.getElementById('hostStats');
-        statsDiv.innerHTML = `
-            <div class="stat-card">
-                <h6><i class="fas fa-database"></i> Total de Backups</h6>
-                <div class="stat-value">${totalBackups}</div>
-                <div class="stat-label">backups realizados</div>
-            </div>
-
-            <div class="stat-card" style="border-left-color: #28a745;">
-                <h6><i class="fas fa-check-circle"></i> Backups Bem-Sucedidos</h6>
-                <div class="stat-value" style="color: #28a745;">${successfulBackups}</div>
-                <div class="stat-label">${totalBackups > 0 ? Math.round((successfulBackups/totalBackups)*100) : 0}% de sucesso</div>
-            </div>
-
-            <div class="stat-card" style="border-left-color: #dc3545;">
-                <h6><i class="fas fa-times-circle"></i> Backups Falhados</h6>
-                <div class="stat-value" style="color: #dc3545;">${failedBackups}</div>
-                <div class="stat-label">${totalBackups > 0 ? Math.round((failedBackups/totalBackups)*100) : 0}% de falha</div>
-            </div>
-
-            <div class="stat-card" style="border-left-color: #17a2b8;">
-                <h6><i class="fas fa-hdd"></i> Espaço Utilizado</h6>
-                <div class="stat-value">${totalSizeGB}</div>
-                <div class="stat-label">GB em backups</div>
-            </div>
-
-            <div class="stat-card" style="border-left-color: #ffc107;">
-                <h6><i class="fas fa-calendar-alt"></i> Agendamentos Ativos</h6>
-                <div class="stat-value">${activeSchedules}</div>
-                <div class="stat-label">de ${hostSchedules.length} total</div>
-            </div>
-        `;
-
-    } catch (error) {
-        console.error('Error loading host stats:', error);
-    }
-}
-
 
 function toggleTreeNode(element) {
     const nodeItem = element.closest('.tree-node-item');
@@ -836,7 +737,7 @@ async function saveHost() {
         if (result.success) {
             showSuccess(result.message);
             hostModal.hide();
-            loadSSHHosts(); // Reload the tree view
+            loadSSHHosts();
         } else {
             showError('Erro: ' + (result.error || 'Falha ao salvar'));
         }
@@ -863,12 +764,7 @@ async function deleteHost(hostId) {
 
         if (result.success) {
             showSuccess(result.message);
-            loadSSHHosts(); // Reload the tree view
-            if (selectedHostId === hostId) {
-                selectedHostId = null; // Clear selection if the deleted host was selected
-                document.getElementById('hostDetails').innerHTML = '<p class="text-muted text-center p-5">Selecione um servidor SSH na lista à esquerda.</p>';
-                document.getElementById('hostStats').innerHTML = '<p class="text-muted text-center p-5">Detalhes estatísticos aparecerão aqui.</p>';
-            }
+            loadSSHHosts();
         } else {
             showError('Erro: ' + (result.error || 'Falha ao excluir'));
         }
@@ -897,7 +793,7 @@ async function testConnection(hostId) {
             showError(result.message);
         }
 
-        loadSSHHosts(); // Refresh the tree view to show updated status
+        loadSSHHosts();
     } catch (error) {
         console.error('Error testing connection:', error);
         showError('Erro ao testar conexão');
@@ -934,7 +830,7 @@ async function showBackupModal() {
             return;
         }
 
-        select.innerHTML = hosts.map(host =>
+        select.innerHTML = hosts.map(host => 
             `<option value="${host.id}">${host.name} (${host.host})</option>`
         ).join('');
 
@@ -1008,12 +904,12 @@ async function loadStatus() {
 
             // Show progress section
             progressSection.style.display = 'block';
-            const timeRemainingHTML = progress.estimated_time_remaining
+            const timeRemainingHTML = progress.estimated_time_remaining 
                 ? `<div class="alert alert-warning mb-2">
                        <i class="fas fa-clock"></i> <strong>Tempo estimado restante:</strong> ${formatTime(progress.estimated_time_remaining)}
                    </div>`
                 : '';
-
+            
             progressContent.innerHTML = `
                 <div class="d-flex justify-content-between mb-3">
                     <h6 class="mb-0">
@@ -1022,11 +918,11 @@ async function loadStatus() {
                     <span class="badge bg-warning">${progress.percentage}%</span>
                 </div>
                 <div class="progress mb-3" style="height: 30px;">
-                    <div class="progress-bar progress-bar-striped progress-bar-animated"
-                         role="progressbar"
+                    <div class="progress-bar progress-bar-striped progress-bar-animated" 
+                         role="progressbar" 
                          style="width: ${progress.percentage}%; background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);"
-                         aria-valuenow="${progress.percentage}"
-                         aria-valuemin="0"
+                         aria-valuenow="${progress.percentage}" 
+                         aria-valuemin="0" 
                          aria-valuemax="100">
                         ${progress.percentage}%
                     </div>
@@ -1051,7 +947,7 @@ async function loadStatus() {
 
             if (data.latest_backup) {
                 const latest = data.latest_backup;
-                const statusClass = latest.status === 'SUCCESS' ? 'status-success' :
+                const statusClass = latest.status === 'SUCCESS' ? 'status-success' : 
                                    latest.status === 'FAILED' ? 'status-failed' : 'status-in-progress';
                 const statusText = latest.status === 'SUCCESS' ? 'Sucesso' :
                                   latest.status === 'FAILED' ? 'Falhou' : 'Em Progresso';
@@ -1138,7 +1034,7 @@ async function loadBackups() {
         }
 
         tbody.innerHTML = backups.map(backup => {
-            const statusClass = backup.status === 'SUCCESS' ? 'status-success' :
+            const statusClass = backup.status === 'SUCCESS' ? 'status-success' : 
                                backup.status === 'FAILED' ? 'status-failed' : 'status-in-progress';
             const statusText = backup.status === 'SUCCESS' ? 'Sucesso' :
                               backup.status === 'FAILED' ? 'Falhou' : 'Em Progresso';
@@ -1210,7 +1106,7 @@ async function restoreBackup(backupId, event) {
 
     let btn = null;
     let originalContent = '';
-
+    
     if (event && event.target) {
         btn = event.target.closest('button');
         if (btn) {
@@ -1247,9 +1143,9 @@ async function restoreBackup(backupId, event) {
 
                 if (status.ready) {
                     clearInterval(checkInterval);
-
+                    
                     showSuccess('Backup pronto! Iniciando download...');
-
+                    
                     // Fazer download automático
                     const downloadLink = document.createElement('a');
                     downloadLink.href = status.download_path;
@@ -1257,7 +1153,7 @@ async function restoreBackup(backupId, event) {
                     document.body.appendChild(downloadLink);
                     downloadLink.click();
                     document.body.removeChild(downloadLink);
-
+                    
                     setTimeout(() => {
                         showInfo('Se o download não iniciar, <a href="' + status.download_path + '" download>clique aqui</a>', 8000);
                     }, 2000);
@@ -1311,11 +1207,11 @@ function formatBytes(bytes) {
 
 function formatTime(seconds) {
     if (!seconds || seconds < 0) return 'Calculando...';
-
+    
     const hours = Math.floor(seconds / 3600);
     const minutes = Math.floor((seconds % 3600) / 60);
     const secs = Math.floor(seconds % 60);
-
+    
     if (hours > 0) {
         return `${hours}h ${minutes}m ${secs}s`;
     } else if (minutes > 0) {
@@ -1330,12 +1226,12 @@ async function loadSchedules() {
         const response = await fetch('/api/schedules');
         const schedules = await response.json();
         allSchedules = schedules;
-
+        
         // Update activity timeline with schedules
         updateActivityTimeline(allBackups, schedules);
-
+        
         const schedulesTable = document.getElementById('schedulesTable');
-
+        
         if (schedules.length === 0) {
             schedulesTable.innerHTML = `
                 <tr>
@@ -1347,7 +1243,7 @@ async function loadSchedules() {
             `;
             return;
         }
-
+        
         schedulesTable.innerHTML = schedules.map(schedule => {
             const scheduleTypeLabels = {
                 'daily': 'Diário',
@@ -1355,9 +1251,9 @@ async function loadSchedules() {
                 'interval_hours': 'Intervalo (Horas)',
                 'interval_days': 'Intervalo (Dias)'
             };
-
+            
             const isActive = schedule.is_active === 1;
-
+            
             return `
                 <tr>
                     <td><strong>${schedule.host_name}</strong></td>
@@ -1411,7 +1307,7 @@ function showAddScheduleModal() {
     document.getElementById('scheduleModalTitle').innerHTML = '<i class="fas fa-clock"></i> Adicionar Agendamento';
     document.getElementById('scheduleForm').reset();
     document.getElementById('scheduleId').value = '';
-
+    
     loadHostsForSchedule();
     scheduleModal.show();
 }
@@ -1420,7 +1316,7 @@ async function loadHostsForSchedule() {
     try {
         const response = await fetch('/api/ssh-hosts');
         const hosts = await response.json();
-
+        
         const select = document.getElementById('scheduleHostSelect');
         select.innerHTML = '<option value="">Selecione um servidor...</option>' +
             hosts.map(host => `<option value="${host.id}">${host.name} (${host.host})</option>`).join('');
@@ -1433,7 +1329,7 @@ function updateScheduleValueField() {
     const scheduleType = document.getElementById('scheduleType').value;
     const scheduleValue = document.getElementById('scheduleValue');
     const scheduleValueHelp = document.getElementById('scheduleValueHelp');
-
+    
     switch (scheduleType) {
         case 'daily':
             scheduleValue.type = 'time';
@@ -1470,17 +1366,17 @@ async function saveSchedule() {
     const hostId = document.getElementById('scheduleHostSelect').value;
     const scheduleType = document.getElementById('scheduleType').value;
     let scheduleValue = document.getElementById('scheduleValue').value;
-
+    
     if (!hostId || !scheduleType || !scheduleValue) {
         showError('Por favor, preencha todos os campos obrigatórios');
         return;
     }
-
+    
     if (scheduleType === 'daily' && scheduleValue.length === 5) {
         const parts = scheduleValue.split(':');
         scheduleValue = `${parts[0]}:${parts[1]}`;
     }
-
+    
     try {
         const response = await fetch('/api/schedules', {
             method: 'POST',
@@ -1491,9 +1387,9 @@ async function saveSchedule() {
                 schedule_value: scheduleValue
             })
         });
-
+        
         const result = await response.json();
-
+        
         if (result.success) {
             showSuccess('Agendamento criado com sucesso!');
             scheduleModal.hide();
@@ -1512,9 +1408,9 @@ async function toggleSchedule(scheduleId) {
         const response = await fetch(`/api/schedules/${scheduleId}/toggle`, {
             method: 'POST'
         });
-
+        
         const result = await response.json();
-
+        
         if (result.success) {
             showSuccess(result.message);
             loadSchedules();
@@ -1532,16 +1428,16 @@ async function deleteSchedule(scheduleId) {
         'Excluir Agendamento',
         'Tem certeza que deseja excluir este agendamento? Esta ação não pode ser desfeita.'
     );
-
+    
     if (!confirmed) return;
-
+    
     try {
         const response = await fetch(`/api/schedules/${scheduleId}`, {
             method: 'DELETE'
         });
-
+        
         const result = await response.json();
-
+        
         if (result.success) {
             showSuccess('Agendamento excluído com sucesso!');
             loadSchedules();
@@ -1558,7 +1454,7 @@ async function showEmailConfigModal() {
     try {
         const response = await fetch('/api/email-config');
         const config = await response.json();
-
+        
         document.getElementById('emailEnabled').checked = config.enabled || false;
         document.getElementById('smtpServer').value = config.smtp_server || '';
         document.getElementById('smtpPort').value = config.smtp_port || 587;
@@ -1570,7 +1466,7 @@ async function showEmailConfigModal() {
         document.getElementById('notifyOnSuccess').checked = config.notify_on_success !== 0;
         document.getElementById('notifyOnFailure').checked = config.notify_on_failure !== 0;
         document.getElementById('notifySchedules').checked = config.notify_schedules !== 0;
-
+        
         emailConfigModal.show();
     } catch (error) {
         console.error('Error loading email config:', error);
@@ -1592,21 +1488,21 @@ async function saveEmailConfig() {
         notify_on_failure: document.getElementById('notifyOnFailure').checked,
         notify_schedules: document.getElementById('notifySchedules').checked
     };
-
+    
     if (config.enabled && (!config.smtp_server || !config.smtp_from || !config.notify_email)) {
         showWarning('Preencha os campos obrigatórios (Servidor SMTP, Email Remetente e Destinatário)');
         return;
     }
-
+    
     try {
         const response = await fetch('/api/email-config', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify(config)
         });
-
+        
         const result = await response.json();
-
+        
         if (result.success) {
             showSuccess('Configurações salvas com sucesso!');
             emailConfigModal.hide();
@@ -1629,23 +1525,23 @@ async function testEmailConfig() {
         smtp_from: document.getElementById('smtpFrom').value.trim(),
         notify_email: document.getElementById('notifyEmail').value.trim()
     };
-
+    
     if (!config.smtp_server || !config.smtp_from || !config.notify_email) {
         showWarning('Preencha os campos obrigatórios primeiro');
         return;
     }
-
+    
     showInfo('Enviando email de teste...');
-
+    
     try {
         const response = await fetch('/api/email-config/test', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify(config)
         });
-
+        
         const result = await response.json();
-
+        
         if (result.success) {
             showSuccess('Email de teste enviado! Verifique sua caixa de entrada.');
         } else {
@@ -1654,40 +1550,5 @@ async function testEmailConfig() {
     } catch (error) {
         console.error('Error testing email:', error);
         showError('Erro ao testar email');
-    }
-}
-
-// Start backup (Modified to use selectedHostId)
-async function startBackup(hostId = null) {
-    const targetHostId = hostId || selectedHostId;
-
-    if (!targetHostId) {
-        alert('Por favor, selecione um servidor SSH primeiro.');
-        return;
-    }
-
-    if (confirm('Deseja iniciar um backup agora?')) {
-        try {
-            const response = await fetch('/api/backup/start', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({ host_id: targetHostId })
-            });
-
-            const result = await response.json();
-
-            if (result.success) {
-                showSuccess('Backup iniciado com sucesso!');
-                loadStatus(); // Update status immediately
-                setTimeout(loadBackups, 3000); // Refresh backup list after a delay
-            } else {
-                showError('Erro: ' + (result.error || 'Falha ao iniciar backup'));
-            }
-        } catch (error) {
-            console.error('Error starting backup:', error);
-            showError('Erro ao iniciar backup');
-        }
     }
 }
