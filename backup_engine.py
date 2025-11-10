@@ -14,6 +14,7 @@ from email_notifier import EmailNotifier
 class BackupEngine:
     def __init__(self):
         self.db = Database()
+        # self.logger is set in perform_backup when a backup starts
         self.logger = None
         self.ssh_host_manager = SSHHostManager()
 
@@ -55,9 +56,9 @@ class BackupEngine:
         completed_weight = sum(self.step_weights[i] for i in range(1, step_number))
         self.progress['percentage'] = int((completed_weight / self.total_weight) * 100)
         self.progress['status'] = 'in_progress'
-
         # Armazenar tamanho estimado do arquivo
-        if estimated_size_mb:
+        if estimated_size_mb is not None:
+            self.progress['estimated_file_size'] = estimated_size_mb
             self.progress['estimated_file_size'] = estimated_size_mb
 
         # Calcular tempo estimado total restante (englobando todas as etapas)
@@ -206,46 +207,30 @@ class BackupEngine:
 
             storage_file_id = None
             upload_error = None
-            upload_complete = threading.Event()
-            
-            def upload_thread():
-                nonlocal storage_file_id, upload_error
-                try:
-                    # Thread 1: Inicializar storage manager
-                    storage_manager = SupabaseStorageManager()
-                    
-                    def upload_progress_callback(message):
-                        self.update_progress(5, f'Upload Supabase: {message}', estimated_size_mb)
-                        if self.logger:
-                            self.logger.info(message)
-                        self.db.add_log(backup_id, 'INFO', message)
-                    
-                    # Thread 2: Upload assíncrono para Supabase
-                    # A leitura do arquivo já é feita em chunks dentro do upload_file
-                    storage_file_id = storage_manager.upload_file(
-                        local_archive, 
-                        archive_name,
-                        progress_callback=upload_progress_callback
-                    )
-                    
-                    self.logger.info(f"Upload completed. File: {storage_file_id}")
-                    self.db.add_log(backup_id, 'INFO', f'Upload completed: {storage_file_id}')
-                except Exception as e:
-                    error_msg = f"Supabase Storage upload failed: {str(e)}"
-                    self.logger.error(error_msg)
-                    self.db.add_log(backup_id, 'ERROR', error_msg)
-                    upload_error = e
-                finally:
-                    upload_complete.set()
-            
-            # Iniciar upload em thread separada (não-daemon para garantir conclusão)
-            upload_worker = threading.Thread(target=upload_thread, daemon=False, name="SupabaseUploadThread")
-            upload_worker.start()
-            
-            # Aguardar conclusão do upload sem bloquear outras rotas
-            # (o Flask continua respondendo outras requisições enquanto isso)
-            upload_complete.wait()
-            
+
+            try:
+                storage_manager = SupabaseStorageManager()
+
+                def upload_progress_callback(message):
+                    self.update_progress(5, f'Upload Supabase: {message}', estimated_size_mb)
+                    if self.logger:
+                        self.logger.info(message)
+                    self.db.add_log(backup_id, 'INFO', message)
+
+                storage_file_id = storage_manager.upload_file(
+                    local_archive, 
+                    archive_name,
+                    progress_callback=upload_progress_callback
+                )
+
+                self.logger.info(f"Upload completed. File: {storage_file_id}")
+                self.db.add_log(backup_id, 'INFO', f'Upload completed: {storage_file_id}')
+            except Exception as e:
+                error_msg = f"Supabase Storage upload failed: {str(e)}"
+                self.logger.error(error_msg)
+                self.db.add_log(backup_id, 'ERROR', error_msg)
+                upload_error = e
+
             if upload_error:
                 # Clean up remote file on upload failure
                 try:
@@ -270,7 +255,7 @@ class BackupEngine:
             # Disconnect SSH
             try:
                 ssh_manager.disconnect()
-            except:
+            except Exception:
                 pass
             
             # Remove local file
@@ -376,7 +361,7 @@ class BackupEngine:
                 except:
                     pass
 
-            if local_archive and os.path.exists(local_archive):
+            if isinstance(local_archive, str) and local_archive and os.path.exists(local_archive):
                 try:
                     os.remove(local_archive)
                     self.logger.info("Local archive deleted (error cleanup)")
