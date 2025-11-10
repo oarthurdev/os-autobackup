@@ -371,3 +371,90 @@ class Database:
         conn.close()
         
         return [dict(row) for row in rows]
+    
+    def get_backup_by_id(self, backup_id: int) -> Optional[Dict]:
+        conn = self.get_connection()
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        
+        cursor.execute('SELECT * FROM backups WHERE id = ?', (backup_id,))
+        
+        row = cursor.fetchone()
+        conn.close()
+        
+        return dict(row) if row else None
+    
+    def save_email_config(self, config: Dict):
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS email_config (
+                id INTEGER PRIMARY KEY CHECK (id = 1),
+                enabled INTEGER DEFAULT 0,
+                smtp_server TEXT,
+                smtp_port INTEGER,
+                smtp_use_tls INTEGER DEFAULT 1,
+                smtp_username TEXT,
+                smtp_password TEXT,
+                smtp_from TEXT,
+                notify_email TEXT,
+                notify_on_success INTEGER DEFAULT 1,
+                notify_on_failure INTEGER DEFAULT 1,
+                notify_schedules INTEGER DEFAULT 1,
+                updated_at TEXT
+            )
+        ''')
+        
+        now = datetime.now().isoformat()
+        cursor.execute('''
+            INSERT OR REPLACE INTO email_config 
+            (id, enabled, smtp_server, smtp_port, smtp_use_tls, smtp_username, smtp_password, 
+             smtp_from, notify_email, notify_on_success, notify_on_failure, notify_schedules, updated_at)
+            VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ''', (
+            1 if config.get('enabled') else 0,
+            config.get('smtp_server'),
+            config.get('smtp_port', 587),
+            1 if config.get('smtp_use_tls') else 0,
+            config.get('smtp_username'),
+            config.get('smtp_password'),
+            config.get('smtp_from'),
+            config.get('notify_email'),
+            1 if config.get('notify_on_success') else 0,
+            1 if config.get('notify_on_failure') else 0,
+            1 if config.get('notify_schedules') else 0,
+            now
+        ))
+        
+        conn.commit()
+        conn.close()
+    
+    def get_email_config(self) -> Optional[Dict]:
+        conn = self.get_connection()
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS email_config (
+                id INTEGER PRIMARY KEY CHECK (id = 1),
+                enabled INTEGER DEFAULT 0,
+                smtp_server TEXT,
+                smtp_port INTEGER,
+                smtp_use_tls INTEGER DEFAULT 1,
+                smtp_username TEXT,
+                smtp_password TEXT,
+                smtp_from TEXT,
+                notify_email TEXT,
+                notify_on_success INTEGER DEFAULT 1,
+                notify_on_failure INTEGER DEFAULT 1,
+                notify_schedules INTEGER DEFAULT 1,
+                updated_at TEXT
+            )
+        ''')
+        
+        cursor.execute('SELECT * FROM email_config WHERE id = 1')
+        row = cursor.fetchone()
+        conn.close()
+        
+        return dict(row) if row else None

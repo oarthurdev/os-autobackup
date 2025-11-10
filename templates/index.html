@@ -28,6 +28,9 @@
                         <span class="status-dot"></span>
                         <span class="status-text">Sistema Ativo</span>
                     </div>
+                    <button class="action-btn action-btn-secondary" onclick="showEmailConfigModal()" title="Configurações de Email">
+                        <i class="fas fa-envelope"></i>
+                    </button>
                     <button class="action-btn action-btn-primary" onclick="showBackupModal()">
                         <i class="fas fa-play"></i>
                         <span>Iniciar Backup</span>
@@ -494,6 +497,116 @@
                         <i class="fas fa-times"></i> Cancelar
                     </button>
                     <button type="button" class="action-btn action-btn-primary" onclick="saveSchedule()">
+                        <i class="fas fa-save"></i> Salvar
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal fade" id="emailConfigModal" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content modern-modal">
+                <div class="modal-header">
+                    <h5 class="modal-title">
+                        <i class="fas fa-envelope"></i> Configurações de Notificações por Email
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="emailConfigForm">
+                        <div class="row g-3">
+                            <div class="col-12">
+                                <div class="form-check form-switch">
+                                    <input class="form-check-input" type="checkbox" id="emailEnabled">
+                                    <label class="form-check-label" for="emailEnabled">
+                                        <strong>Habilitar Notificações por Email</strong>
+                                    </label>
+                                </div>
+                            </div>
+                            
+                            <div class="col-md-8">
+                                <label for="smtpServer" class="form-label">
+                                    <i class="fas fa-server"></i> Servidor SMTP *
+                                </label>
+                                <input type="text" class="form-control modern-input" id="smtpServer" placeholder="smtp.gmail.com">
+                            </div>
+                            <div class="col-md-4">
+                                <label for="smtpPort" class="form-label">
+                                    <i class="fas fa-hashtag"></i> Porta *
+                                </label>
+                                <input type="number" class="form-control modern-input" id="smtpPort" value="587">
+                            </div>
+                            
+                            <div class="col-12">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" id="smtpUseTls" checked>
+                                    <label class="form-check-label" for="smtpUseTls">
+                                        Usar TLS/STARTTLS
+                                    </label>
+                                </div>
+                            </div>
+                            
+                            <div class="col-md-6">
+                                <label for="smtpUsername" class="form-label">
+                                    <i class="fas fa-user"></i> Usuário SMTP
+                                </label>
+                                <input type="text" class="form-control modern-input" id="smtpUsername">
+                            </div>
+                            <div class="col-md-6">
+                                <label for="smtpPassword" class="form-label">
+                                    <i class="fas fa-lock"></i> Senha SMTP
+                                </label>
+                                <input type="password" class="form-control modern-input" id="smtpPassword">
+                            </div>
+                            
+                            <div class="col-md-6">
+                                <label for="smtpFrom" class="form-label">
+                                    <i class="fas fa-paper-plane"></i> Email Remetente *
+                                </label>
+                                <input type="email" class="form-control modern-input" id="smtpFrom" placeholder="backup@exemplo.com">
+                            </div>
+                            <div class="col-md-6">
+                                <label for="notifyEmail" class="form-label">
+                                    <i class="fas fa-inbox"></i> Email Destinatário *
+                                </label>
+                                <input type="email" class="form-control modern-input" id="notifyEmail" placeholder="admin@exemplo.com">
+                            </div>
+                            
+                            <div class="col-12">
+                                <label class="form-label">
+                                    <i class="fas fa-bell"></i> Notificar quando:
+                                </label>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" id="notifyOnSuccess" checked>
+                                    <label class="form-check-label" for="notifyOnSuccess">
+                                        Backup concluído com sucesso
+                                    </label>
+                                </div>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" id="notifyOnFailure" checked>
+                                    <label class="form-check-label" for="notifyOnFailure">
+                                        Backup falhou
+                                    </label>
+                                </div>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" id="notifySchedules" checked>
+                                    <label class="form-check-label" for="notifySchedules">
+                                        Agendamentos executados
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="action-btn action-btn-ghost" onclick="testEmailConfig()">
+                        <i class="fas fa-vial"></i> Testar Configuração
+                    </button>
+                    <button type="button" class="action-btn action-btn-ghost" data-bs-dismiss="modal">
+                        <i class="fas fa-times"></i> Cancelar
+                    </button>
+                    <button type="button" class="action-btn action-btn-primary" onclick="saveEmailConfig()">
                         <i class="fas fa-save"></i> Salvar
                     </button>
                 </div>

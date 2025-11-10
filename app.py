@@ -257,6 +257,35 @@ def scheduler_status():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
+@app.route('/api/email-config', methods=['GET'])
+def get_email_config():
+    config = db.get_email_config()
+    if config:
+        config.pop('smtp_password', None)
+    return jsonify(config or {})
+
+@app.route('/api/email-config', methods=['POST'])
+def save_email_config():
+    data = request.get_json()
+    
+    try:
+        db.save_email_config(data)
+        return jsonify({'success': True, 'message': 'Configurações salvas com sucesso'})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 400
+
+@app.route('/api/email-config/test', methods=['POST'])
+def test_email_config():
+    data = request.get_json()
+    
+    try:
+        from email_notifier import EmailNotifier
+        notifier = EmailNotifier()
+        notifier.send_test_email(data)
+        return jsonify({'success': True, 'message': 'Email de teste enviado com sucesso!'})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 400
+
 @app.route('/api/backup/<int:backup_id>/restore', methods=['POST'])
 def restore_backup(backup_id):
     try:

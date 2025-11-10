@@ -1,4 +1,4 @@
-let logsModal, hostModal, backupModal, scheduleModal;
+let logsModal, hostModal, backupModal, scheduleModal, emailConfigModal;
 let currentHostId = null;
 let currentScheduleId = null;
 let allBackups = [];
@@ -9,6 +9,7 @@ document.addEventListener('DOMContentLoaded', function() {
     hostModal = new bootstrap.Modal(document.getElementById('hostModal'));
     backupModal = new bootstrap.Modal(document.getElementById('backupModal'));
     scheduleModal = new bootstrap.Modal(document.getElementById('scheduleModal'));
+    emailConfigModal = new bootstrap.Modal(document.getElementById('emailConfigModal'));
 
     // Load theme preference
     loadTheme();
@@ -1194,5 +1195,108 @@ async function deleteSchedule(scheduleId) {
     } catch (error) {
         console.error('Error deleting schedule:', error);
         showError('Erro ao excluir agendamento');
+    }
+}
+
+async function showEmailConfigModal() {
+    try {
+        const response = await fetch('/api/email-config');
+        const config = await response.json();
+        
+        document.getElementById('emailEnabled').checked = config.enabled || false;
+        document.getElementById('smtpServer').value = config.smtp_server || '';
+        document.getElementById('smtpPort').value = config.smtp_port || 587;
+        document.getElementById('smtpUseTls').checked = config.smtp_use_tls !== 0;
+        document.getElementById('smtpUsername').value = config.smtp_username || '';
+        document.getElementById('smtpPassword').value = '';
+        document.getElementById('smtpFrom').value = config.smtp_from || '';
+        document.getElementById('notifyEmail').value = config.notify_email || '';
+        document.getElementById('notifyOnSuccess').checked = config.notify_on_success !== 0;
+        document.getElementById('notifyOnFailure').checked = config.notify_on_failure !== 0;
+        document.getElementById('notifySchedules').checked = config.notify_schedules !== 0;
+        
+        emailConfigModal.show();
+    } catch (error) {
+        console.error('Error loading email config:', error);
+        showError('Erro ao carregar configurações de email');
+    }
+}
+
+async function saveEmailConfig() {
+    const config = {
+        enabled: document.getElementById('emailEnabled').checked,
+        smtp_server: document.getElementById('smtpServer').value.trim(),
+        smtp_port: parseInt(document.getElementById('smtpPort').value),
+        smtp_use_tls: document.getElementById('smtpUseTls').checked,
+        smtp_username: document.getElementById('smtpUsername').value.trim(),
+        smtp_password: document.getElementById('smtpPassword').value,
+        smtp_from: document.getElementById('smtpFrom').value.trim(),
+        notify_email: document.getElementById('notifyEmail').value.trim(),
+        notify_on_success: document.getElementById('notifyOnSuccess').checked,
+        notify_on_failure: document.getElementById('notifyOnFailure').checked,
+        notify_schedules: document.getElementById('notifySchedules').checked
+    };
+    
+    if (config.enabled && (!config.smtp_server || !config.smtp_from || !config.notify_email)) {
+        showWarning('Preencha os campos obrigatórios (Servidor SMTP, Email Remetente e Destinatário)');
+        return;
+    }
+    
+    try {
+        const response = await fetch('/api/email-config', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(config)
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            showSuccess('Configurações salvas com sucesso!');
+            emailConfigModal.hide();
+        } else {
+            showError('Erro ao salvar: ' + result.error);
+        }
+    } catch (error) {
+        console.error('Error saving email config:', error);
+        showError('Erro ao salvar configurações');
+    }
+}
+
+async function testEmailConfig() {
+    const config = {
+        smtp_server: document.getElementById('smtpServer').value.trim(),
+        smtp_port: parseInt(document.getElementById('smtpPort').value),
+        smtp_use_tls: document.getElementById('smtpUseTls').checked,
+        smtp_username: document.getElementById('smtpUsername').value.trim(),
+        smtp_password: document.getElementById('smtpPassword').value,
+        smtp_from: document.getElementById('smtpFrom').value.trim(),
+        notify_email: document.getElementById('notifyEmail').value.trim()
+    };
+    
+    if (!config.smtp_server || !config.smtp_from || !config.notify_email) {
+        showWarning('Preencha os campos obrigatórios primeiro');
+        return;
+    }
+    
+    showInfo('Enviando email de teste...');
+    
+    try {
+        const response = await fetch('/api/email-config/test', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(config)
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            showSuccess('Email de teste enviado! Verifique sua caixa de entrada.');
+        } else {
+            showError('Falha ao enviar: ' + result.error);
+        }
+    } catch (error) {
+        console.error('Error testing email:', error);
+        showError('Erro ao testar email');
     }
 }

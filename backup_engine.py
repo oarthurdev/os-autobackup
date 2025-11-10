@@ -8,6 +8,7 @@ from database import Database
 from logger import BackupLogger
 from config import Config
 from ssh_host_manager import SSHHostManager
+from email_notifier import EmailNotifier
 
 class BackupEngine:
     def __init__(self):
@@ -262,6 +263,15 @@ class BackupEngine:
             self.db.add_log(backup_id, 'INFO', f'Backup completed ({duration:.2f}s)')
 
             self.progress['status'] = 'completed'
+            
+            # Enviar notificação por email
+            try:
+                notifier = EmailNotifier()
+                email_config = notifier.get_email_config()
+                if email_config and email_config.get('notify_on_success'):
+                    notifier.send_backup_notification(backup_id, 'SUCCESS')
+            except Exception as e:
+                self.logger.warning(f"Failed to send email notification: {str(e)}")
 
             return {
                 'success': True,
@@ -290,6 +300,15 @@ class BackupEngine:
                 end_time=end_time.isoformat(),
                 duration_seconds=duration
             )
+            
+            # Enviar notificação por email
+            try:
+                notifier = EmailNotifier()
+                email_config = notifier.get_email_config()
+                if email_config and email_config.get('notify_on_failure'):
+                    notifier.send_backup_notification(backup_id, 'FAILED', error_msg)
+            except Exception as e:
+                self.logger.warning(f"Failed to send email notification: {str(e)}")
 
             # Clean up on error
             if ssh_manager:
