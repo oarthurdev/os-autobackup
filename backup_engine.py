@@ -1,5 +1,6 @@
 import os
 import time
+import threading
 from datetime import datetime
 from typing import Optional
 from ssh_manager import SSHManager
@@ -198,35 +199,46 @@ class BackupEngine:
             self.logger.info("Uploading to Supabase Storage...")
             self.db.add_log(backup_id, 'INFO', 'Uploading to Supabase Storage')
 
-            storage_manager = SupabaseStorageManager()
             storage_file_id = None
             upload_error = None
+            upload_complete = threading.Event()
             
-            try:
-                def upload_progress_callback(message):
-                    self.update_progress(5, f'Upload Supabase: {message}', estimated_size_mb)
-                    if self.logger:
-                        self.logger.info(message)
-                    self.db.add_log(backup_id, 'INFO', message)
-                
-                self.logger.info("Uploading to Supabase Storage...")
-                self.update_progress(5, 'Enviando para Supabase Storage...', estimated_size_mb)
-                
-                # Usar upload direto - mais simples e confiável
-                storage_file_id = storage_manager.upload_file(
-                    local_archive, 
-                    archive_name,
-                    progress_callback=upload_progress_callback
-                )
-                
-                self.logger.info(f"Upload completed. File: {storage_file_id}")
-                self.db.add_log(backup_id, 'INFO', f'Upload completed: {storage_file_id}')
-            except Exception as e:
-                error_msg = f"Supabase Storage upload failed: {str(e)}"
-                self.logger.error(error_msg)
-                self.db.add_log(backup_id, 'ERROR', error_msg)
-                storage_file_id = None
-                upload_error = e
+            def upload_thread():
+                nonlocal storage_file_id, upload_error
+                try:
+                    storage_manager = SupabaseStorageManager()
+                    
+                    def upload_progress_callback(message):
+                        self.update_progress(5, f'Upload Supabase: {message}', estimated_size_mb)
+                        if self.logger:
+                            self.logger.info(message)
+                        self.db.add_log(backup_id, 'INFO', message)
+                    
+                    # Upload em thread separada
+                    storage_file_id = storage_manager.upload_file(
+                        local_archive, 
+                        archive_name,
+                        progress_callback=upload_progress_callback
+                    )
+                    
+                    self.logger.info(f"Upload completed. File: {storage_file_id}")
+                    self.db.add_log(backup_id, 'INFO', f'Upload completed: {storage_file_id}')
+                except Exception as e:
+                    error_msg = f"Supabase Storage upload failed: {str(e)}"
+                    self.logger.error(error_msg)
+                    self.db.add_log(backup_id, 'ERROR', error_msg)
+                    upload_error = e
+                finally:
+                    upload_complete.set()
+            
+            # Iniciar upload em thread separada
+            upload_worker = threading.Thread(target=upload_thread, daemon=False)
+            upload_worker.start()
+            
+            # Aguardar conclusão do upload
+            upload_complete.wait()
+            
+            if upload_error:
                 # Clean up remote file on upload failure
                 try:
                     self.logger.info("Cleaning up remote archive after upload failure")
