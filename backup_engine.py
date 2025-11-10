@@ -289,6 +289,20 @@ class BackupEngine:
                     notifier.send_backup_notification(backup_id, 'SUCCESS')
             except Exception as e:
                 self.logger.warning(f"Failed to send email notification: {str(e)}")
+            
+            # Aplicar política de retenção automaticamente
+            try:
+                from retention_manager import RetentionManager
+                retention = RetentionManager()
+                policy = self.db.get_retention_policy()
+                
+                if policy and policy.get('enabled') and policy.get('auto_cleanup'):
+                    self.logger.info("Aplicando política de retenção...")
+                    result = retention.apply_retention_policy()
+                    if result['removed_count'] > 0:
+                        self.logger.info(f"Política de retenção aplicada: {result['removed_count']} backup(s) removido(s)")
+            except Exception as e:
+                self.logger.warning(f"Erro ao aplicar política de retenção: {str(e)}")
 
             return {
                 'success': True,

@@ -272,6 +272,30 @@
                 </div>
             </section>
 
+            <!-- Retention Policy Section -->
+            <section class="retention-section">
+                <div class="section-card">
+                    <div class="section-header">
+                        <h2 class="section-title">
+                            <i class="fas fa-trash-restore"></i>
+                            Política de Retenção
+                        </h2>
+                        <button class="action-btn action-btn-secondary" onclick="showRetentionModal()">
+                            <i class="fas fa-cog"></i>
+                            <span>Configurar</span>
+                        </button>
+                    </div>
+                    <div class="section-body">
+                        <div id="retentionStats" class="retention-stats">
+                            <div class="loading-state">
+                                <div class="spinner"></div>
+                                <p>Carregando estatísticas...</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
             <!-- History Section -->
             <section class="history-section">
                 <div class="section-card">
@@ -497,6 +521,77 @@
                         <i class="fas fa-times"></i> Cancelar
                     </button>
                     <button type="button" class="action-btn action-btn-primary" onclick="saveSchedule()">
+                        <i class="fas fa-save"></i> Salvar
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal fade" id="retentionModal" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content modern-modal">
+                <div class="modal-header">
+                    <h5 class="modal-title">
+                        <i class="fas fa-trash-restore"></i> Configurar Política de Retenção
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="retentionForm">
+                        <div class="row g-3">
+                            <div class="col-12">
+                                <div class="form-check form-switch">
+                                    <input class="form-check-input" type="checkbox" id="retentionEnabled" checked>
+                                    <label class="form-check-label" for="retentionEnabled">
+                                        <strong>Habilitar Política de Retenção</strong>
+                                    </label>
+                                </div>
+                                <small class="text-muted">Remove automaticamente backups antigos para economizar espaço</small>
+                            </div>
+                            
+                            <div class="col-12">
+                                <label for="policyType" class="form-label">
+                                    <i class="fas fa-filter"></i> Tipo de Política *
+                                </label>
+                                <select class="form-select modern-input" id="policyType">
+                                    <option value="count">Manter N backups mais recentes</option>
+                                    <option value="days">Manter backups de N dias</option>
+                                </select>
+                            </div>
+                            
+                            <div class="col-md-6" id="countField">
+                                <label for="retentionCount" class="form-label">
+                                    <i class="fas fa-hashtag"></i> Número de Backups
+                                </label>
+                                <input type="number" class="form-control modern-input" id="retentionCount" value="10" min="1">
+                                <small class="text-muted">Manter os N backups mais recentes</small>
+                            </div>
+                            
+                            <div class="col-md-6 d-none" id="daysField">
+                                <label for="retentionDays" class="form-label">
+                                    <i class="fas fa-calendar"></i> Dias de Retenção
+                                </label>
+                                <input type="number" class="form-control modern-input" id="retentionDays" value="30" min="1">
+                                <small class="text-muted">Remover backups mais antigos que N dias</small>
+                            </div>
+                            
+                            <div class="col-12">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" id="autoCleanup" checked>
+                                    <label class="form-check-label" for="autoCleanup">
+                                        Executar limpeza automaticamente após cada backup
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="action-btn action-btn-ghost" data-bs-dismiss="modal">
+                        <i class="fas fa-times"></i> Cancelar
+                    </button>
+                    <button type="button" class="action-btn action-btn-primary" onclick="saveRetentionPolicy()">
                         <i class="fas fa-save"></i> Salvar
                     </button>
                 </div>

@@ -378,5 +378,42 @@ def download_file(filename):
         mimetype='application/zip'
     )
 
+@app.route('/api/retention-policy', methods=['GET'])
+def get_retention_policy():
+    policy = db.get_retention_policy()
+    return jsonify(policy or {})
+
+@app.route('/api/retention-policy', methods=['POST'])
+def save_retention_policy():
+    data = request.get_json()
+    
+    try:
+        db.save_retention_policy(data)
+        return jsonify({'success': True, 'message': 'Política salva com sucesso'})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 400
+
+@app.route('/api/retention-policy/apply', methods=['POST'])
+def apply_retention_policy():
+    from retention_manager import RetentionManager
+    
+    try:
+        retention = RetentionManager()
+        result = retention.apply_retention_policy()
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/retention-policy/stats')
+def get_retention_stats():
+    from retention_manager import RetentionManager
+    
+    try:
+        retention = RetentionManager()
+        stats = retention.get_retention_stats()
+        return jsonify(stats)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=False, threaded=True)

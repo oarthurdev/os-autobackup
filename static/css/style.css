@@ -1169,6 +1169,106 @@ body {
     }
 }
 
+/* Retention Section */
+.retention-info {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+}
+
+.retention-stat-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1rem;
+}
+
+.retention-stat-item {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 1rem;
+    background: var(--bg-tertiary);
+    border-radius: var(--radius-md);
+    border: 1px solid var(--border-color);
+    transition: var(--transition);
+}
+
+.retention-stat-item:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-md);
+}
+
+.retention-stat-icon {
+    width: 48px;
+    height: 48px;
+    border-radius: var(--radius-md);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 20px;
+    flex-shrink: 0;
+    background: rgba(59, 130, 246, 0.1);
+    color: var(--accent-primary);
+}
+
+.retention-icon-size {
+    background: rgba(0, 200, 83, 0.1);
+    color: var(--accent-success);
+}
+
+.retention-icon-remove {
+    background: rgba(255, 149, 0, 0.1);
+    color: var(--accent-warning);
+}
+
+.retention-icon-free {
+    background: rgba(0, 122, 255, 0.1);
+    color: var(--accent-info);
+}
+
+.retention-stat-info {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.retention-stat-label {
+    font-size: 12px;
+    color: var(--text-tertiary);
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.retention-stat-value {
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--text-primary);
+}
+
+.retention-policy-info {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.alert-info {
+    background: rgba(0, 122, 255, 0.1);
+    border: 1px solid rgba(0, 122, 255, 0.2);
+    border-radius: var(--radius-md);
+    padding: 1rem;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    color: var(--text-primary);
+}
+
+.alert-info i {
+    color: var(--accent-info);
+    font-size: 18px;
+}
+
 /* Responsive */
 @media (max-width: 768px) {
     .header-content {

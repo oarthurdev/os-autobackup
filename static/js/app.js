@@ -1,4 +1,4 @@
-let logsModal, hostModal, backupModal, scheduleModal, emailConfigModal;
+let logsModal, hostModal, backupModal, scheduleModal, emailConfigModal, retentionModal;
 let currentHostId = null;
 let currentScheduleId = null;
 let allBackups = [];
@@ -10,6 +10,7 @@ document.addEventListener('DOMContentLoaded', function() {
     backupModal = new bootstrap.Modal(document.getElementById('backupModal'));
     scheduleModal = new bootstrap.Modal(document.getElementById('scheduleModal'));
     emailConfigModal = new bootstrap.Modal(document.getElementById('emailConfigModal'));
+    retentionModal = new bootstrap.Modal(document.getElementById('retentionModal'));
 
     // Load theme preference
     loadTheme();
@@ -18,12 +19,209 @@ document.addEventListener('DOMContentLoaded', function() {
     loadSSHHosts();
     loadBackups();
     loadSchedules();
+    loadRetentionStats();
 
     setInterval(loadStatus, 5000);
     setInterval(loadSSHHosts, 15000);
     setInterval(loadBackups, 10000);
     setInterval(loadSchedules, 15000);
+    setInterval(loadRetentionStats, 30000);
 });
+
+async function loadRetentionStats() {
+    try {
+        const response = await fetch('/api/retention-policy/stats');
+        const stats = await response.json();
+        
+        const container = document.getElementById('retentionStats');
+        
+        if (!stats.policy) {
+            container.innerHTML = `
+                <div class="text-center text-muted py-3">
+                    <i class="fas fa-cog fa-2x mb-2"></i>
+                    <p>Nenhuma política configurada</p>
+                    <button class="action-btn action-btn-primary" onclick="showRetentionModal()">
+                        <i class="fas fa-plus"></i> Configurar Política
+                    </button>
+                </div>
+            `;
+            return;
+        }
+        
+        const policy = stats.policy;
+        const policyText = policy.policy_type === 'count' 
+            ? `Manter ${policy.retention_count} backups mais recentes`
+            : `Manter backups de ${policy.retention_days} dias`;
+        
+        container.innerHTML = `
+            <div class="retention-info">
+                <div class="retention-stat-grid">
+                    <div class="retention-stat-item">
+                        <div class="retention-stat-icon">
+                            <i class="fas fa-database"></i>
+                        </div>
+                        <div class="retention-stat-info">
+                            <div class="retention-stat-label">Backups Ativos</div>
+                            <div class="retention-stat-value">${stats.total_backups}</div>
+                        </div>
+                    </div>
+                    
+                    <div class="retention-stat-item">
+                        <div class="retention-stat-icon retention-icon-size">
+                            <i class="fas fa-hdd"></i>
+                        </div>
+                        <div class="retention-stat-info">
+                            <div class="retention-stat-label">Espaço Usado</div>
+                            <div class="retention-stat-value">${formatBytes(stats.total_size)}</div>
+                        </div>
+                    </div>
+                    
+                    <div class="retention-stat-item">
+                        <div class="retention-stat-icon retention-icon-remove">
+                            <i class="fas fa-trash"></i>
+                        </div>
+                        <div class="retention-stat-info">
+                            <div class="retention-stat-label">A Remover</div>
+                            <div class="retention-stat-value">${stats.backups_to_remove}</div>
+                        </div>
+                    </div>
+                    
+                    <div class="retention-stat-item">
+                        <div class="retention-stat-icon retention-icon-free">
+                            <i class="fas fa-arrow-down"></i>
+                        </div>
+                        <div class="retention-stat-info">
+                            <div class="retention-stat-label">Espaço Liberável</div>
+                            <div class="retention-stat-value">${formatBytes(stats.removable_size)}</div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="retention-policy-info">
+                    <div class="alert alert-info mb-3">
+                        <i class="fas fa-info-circle"></i>
+                        <strong>Política Ativa:</strong> ${policyText}
+                        ${policy.auto_cleanup ? ' (Limpeza automática habilitada)' : ''}
+                    </div>
+                    
+                    ${stats.backups_to_remove > 0 ? `
+                        <button class="action-btn action-btn-danger w-100" onclick="applyRetentionNow()">
+                            <i class="fas fa-trash-alt"></i> Remover ${stats.backups_to_remove} Backup(s) Agora
+                        </button>
+                    ` : `
+                        <div class="text-center text-muted">
+                            <i class="fas fa-check-circle"></i> Nenhum backup para remover
+                        </div>
+                    `}
+                </div>
+            </div>
+        `;
+    } catch (error) {
+        console.error('Error loading retention stats:', error);
+    }
+}
+
+async function showRetentionModal() {
+    try {
+        const response = await fetch('/api/retention-policy');
+        const policy = await response.json();
+        
+        document.getElementById('retentionEnabled').checked = policy.enabled !== 0;
+        document.getElementById('policyType').value = policy.policy_type || 'count';
+        document.getElementById('retentionCount').value = policy.retention_count || 10;
+        document.getElementById('retentionDays').value = policy.retention_days || 30;
+        document.getElementById('autoCleanup').checked = policy.auto_cleanup !== 0;
+        
+        toggleRetentionFields();
+        retentionModal.show();
+    } catch (error) {
+        console.error('Error loading retention policy:', error);
+        retentionModal.show();
+    }
+}
+
+function toggleRetentionFields() {
+    const policyType = document.getElementById('policyType').value;
+    const countField = document.getElementById('countField');
+    const daysField = document.getElementById('daysField');
+    
+    if (policyType === 'count') {
+        countField.classList.remove('d-none');
+        daysField.classList.add('d-none');
+    } else {
+        countField.classList.add('d-none');
+        daysField.classList.remove('d-none');
+    }
+}
+
+// Adicionar listener ao select de tipo de política
+document.addEventListener('DOMContentLoaded', function() {
+    const policyTypeSelect = document.getElementById('policyType');
+    if (policyTypeSelect) {
+        policyTypeSelect.addEventListener('change', toggleRetentionFields);
+    }
+});
+
+async function saveRetentionPolicy() {
+    const policy = {
+        enabled: document.getElementById('retentionEnabled').checked,
+        policy_type: document.getElementById('policyType').value,
+        retention_count: parseInt(document.getElementById('retentionCount').value),
+        retention_days: parseInt(document.getElementById('retentionDays').value),
+        auto_cleanup: document.getElementById('autoCleanup').checked
+    };
+    
+    try {
+        const response = await fetch('/api/retention-policy', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(policy)
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            showSuccess('Política de retenção salva com sucesso!');
+            retentionModal.hide();
+            loadRetentionStats();
+        } else {
+            showError('Erro ao salvar: ' + result.error);
+        }
+    } catch (error) {
+        console.error('Error saving retention policy:', error);
+        showError('Erro ao salvar política');
+    }
+}
+
+async function applyRetentionNow() {
+    const confirmed = await showConfirm(
+        'Aplicar Política de Retenção',
+        'Deseja remover os backups antigos agora? Esta ação não pode ser desfeita.'
+    );
+    
+    if (!confirmed) return;
+    
+    showInfo('Aplicando política de retenção...');
+    
+    try {
+        const response = await fetch('/api/retention-policy/apply', {
+            method: 'POST'
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            showSuccess(`${result.removed_count} backup(s) removido(s). ${formatBytes(result.freed_space)} liberados!`);
+            loadRetentionStats();
+            loadBackups();
+        } else {
+            showError('Erro ao aplicar política: ' + result.error);
+        }
+    } catch (error) {
+        console.error('Error applying retention:', error);
+        showError('Erro ao aplicar política de retenção');
+    }
+}
 
 // Custom Toast Notification System
 function showToast(message, type = 'info', duration = 4000) {

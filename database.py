@@ -458,3 +458,89 @@ class Database:
         conn.close()
         
         return dict(row) if row else None
+    
+    def save_retention_policy(self, policy: Dict):
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS retention_policies (
+                id INTEGER PRIMARY KEY CHECK (id = 1),
+                enabled INTEGER DEFAULT 1,
+                policy_type TEXT DEFAULT 'count',
+                retention_count INTEGER DEFAULT 10,
+                retention_days INTEGER DEFAULT 30,
+                auto_cleanup INTEGER DEFAULT 1,
+                updated_at TEXT
+            )
+        ''')
+        
+        now = datetime.now().isoformat()
+        cursor.execute('''
+            INSERT OR REPLACE INTO retention_policies 
+            (id, enabled, policy_type, retention_count, retention_days, auto_cleanup, updated_at)
+            VALUES (1, ?, ?, ?, ?, ?, ?)
+        ''', (
+            1 if policy.get('enabled') else 0,
+            policy.get('policy_type', 'count'),
+            policy.get('retention_count', 10),
+            policy.get('retention_days', 30),
+            1 if policy.get('auto_cleanup') else 0,
+            now
+        ))
+        
+        conn.commit()
+        conn.close()
+    
+    def get_retention_policy(self) -> Optional[Dict]:
+        conn = self.get_connection()
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS retention_policies (
+                id INTEGER PRIMARY KEY CHECK (id = 1),
+                enabled INTEGER DEFAULT 1,
+                policy_type TEXT DEFAULT 'count',
+                retention_count INTEGER DEFAULT 10,
+                retention_days INTEGER DEFAULT 30,
+                auto_cleanup INTEGER DEFAULT 1,
+                updated_at TEXT
+            )
+        ''')
+        
+        cursor.execute('SELECT * FROM retention_policies WHERE id = 1')
+        row = cursor.fetchone()
+        conn.close()
+        
+        return dict(row) if row else None
+    
+    def get_backups_to_cleanup(self, policy: Dict) -> List[Dict]:
+        """Retorna lista de backups que devem ser removidos baseado na política"""
+        conn = self.get_connection()
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        
+        if policy['policy_type'] == 'count':
+            # Manter apenas os N backups mais recentes bem-sucedidos
+            cursor.execute('''
+                SELECT * FROM backups
+                WHERE status = 'SUCCESS' AND drive_file_id IS NOT NULL
+                ORDER BY timestamp DESC
+                LIMIT -1 OFFSET ?
+            ''', (policy['retention_count'],))
+        else:  # policy_type == 'days'
+            # Remover backups mais antigos que N dias
+            from datetime import datetime, timedelta
+            cutoff_date = (datetime.now() - timedelta(days=policy['retention_days'])).isoformat()
+            cursor.execute('''
+                SELECT * FROM backups
+                WHERE status = 'SUCCESS' AND drive_file_id IS NOT NULL
+                AND timestamp < ?
+                ORDER BY timestamp ASC
+            ''', (cutoff_date,))
+        
+        rows = cursor.fetchall()
+        conn.close()
+        
+        return [dict(row) for row in rows]
