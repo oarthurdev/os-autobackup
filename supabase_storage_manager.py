@@ -50,14 +50,24 @@ class SupabaseStorageManager:
             file_size = os.path.getsize(file_path)
             
             if progress_callback:
-                progress_callback(f"Iniciando upload de {file_size / (1024*1024):.2f} MB para Supabase Storage...")
+                progress_callback(f"Iniciando leitura de {file_size / (1024*1024):.2f} MB do disco...")
             
-            # Ler arquivo inteiro - Supabase SDK não suporta upload em chunks
-            # O upload acontece em memória mas é liberado após o envio
+            # Ler arquivo em chunks para não bloquear muito tempo
+            file_data = bytearray()
+            chunk_size = 10 * 1024 * 1024  # 10MB chunks
+            bytes_read = 0
+            
             with open(file_path, 'rb') as f:
-                if progress_callback:
-                    progress_callback("Lendo arquivo para upload...")
-                file_data = f.read()
+                while True:
+                    chunk = f.read(chunk_size)
+                    if not chunk:
+                        break
+                    file_data.extend(chunk)
+                    bytes_read += len(chunk)
+                    
+                    if progress_callback:
+                        progress = (bytes_read / file_size) * 100
+                        progress_callback(f"Lendo arquivo: {progress:.1f}% ({bytes_read / (1024*1024):.2f}/{file_size / (1024*1024):.2f} MB)")
             
             if progress_callback:
                 progress_callback(f"Enviando {file_size / (1024*1024):.2f} MB para Supabase Storage...")
@@ -65,7 +75,7 @@ class SupabaseStorageManager:
             # Fazer upload
             response = self.client.storage.from_(self.bucket_name).upload(
                 file_name,
-                file_data,
+                bytes(file_data),
                 file_options={"content-type": content_type}
             )
             

@@ -113,6 +113,11 @@ class BackupEngine:
         return self.progress.copy()
 
     def perform_backup(self, host_id: Optional[int] = None, paths: Optional[list] = None) -> dict:
+        """
+        Executa backup completo.
+        NOTA: Esta função já é executada em thread separada pelo Flask,
+        então não bloqueia outras requisições HTTP.
+        """
         start_time = datetime.now()
         start_time_str = start_time.isoformat()
 
@@ -206,6 +211,7 @@ class BackupEngine:
             def upload_thread():
                 nonlocal storage_file_id, upload_error
                 try:
+                    # Thread 1: Inicializar storage manager
                     storage_manager = SupabaseStorageManager()
                     
                     def upload_progress_callback(message):
@@ -214,7 +220,8 @@ class BackupEngine:
                             self.logger.info(message)
                         self.db.add_log(backup_id, 'INFO', message)
                     
-                    # Upload em thread separada
+                    # Thread 2: Upload assíncrono para Supabase
+                    # A leitura do arquivo já é feita em chunks dentro do upload_file
                     storage_file_id = storage_manager.upload_file(
                         local_archive, 
                         archive_name,
@@ -231,11 +238,12 @@ class BackupEngine:
                 finally:
                     upload_complete.set()
             
-            # Iniciar upload em thread separada
-            upload_worker = threading.Thread(target=upload_thread, daemon=False)
+            # Iniciar upload em thread separada (não-daemon para garantir conclusão)
+            upload_worker = threading.Thread(target=upload_thread, daemon=False, name="SupabaseUploadThread")
             upload_worker.start()
             
-            # Aguardar conclusão do upload
+            # Aguardar conclusão do upload sem bloquear outras rotas
+            # (o Flask continua respondendo outras requisições enquanto isso)
             upload_complete.wait()
             
             if upload_error:
