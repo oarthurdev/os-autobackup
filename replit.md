@@ -68,6 +68,19 @@ A Python-based automated backup system for Ubuntu VPS servers with CLI and web d
 **Note**: SSH server credentials are managed through the web interface and stored encrypted in the database.
 
 ## Recent Changes
+- **CRITICAL FIX: Upload Streaming para Supabase Storage** (2025-11-10)
+  - **Problema identificado**: Sistema travava ao enviar arquivos grandes para Supabase
+  - **Causa raiz**: Upload carregava arquivo INTEIRO na memória (bytearray) antes de enviar
+  - **Impacto**: Arquivos >5GB causavam alto uso de memória, travamento e timeout
+  - **Solução implementada**:
+    * Upload em streaming direto usando file handle - **ZERO buffering na memória**
+    * ProgressFileWrapper para monitorar progresso em tempo real (reporta a cada 5%)
+    * Sistema de retry com backoff exponencial (3 tentativas: 5s, 10s, 15s)
+    * Limpeza automática de uploads parciais em caso de falha
+  - **Resultado**: Arquivos grandes agora fazem upload sem travar o sistema
+  - **Performance**: Uso de memória constante independente do tamanho do arquivo
+  - **Aprovado pelo arquiteto**: Sem problemas de segurança ou performance detectados
+
 - **Critical Fix: Remote File Cleanup** (2025-11-09)
   - Fixed order of operations to ensure proper cleanup
   - **New behavior**:
