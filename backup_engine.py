@@ -200,9 +200,19 @@ class BackupEngine:
 
             storage_manager = SupabaseStorageManager()
             try:
+                def upload_progress_callback(message):
+                    self.update_progress(5, f'Upload Supabase: {message}', estimated_size_mb)
+                    if self.logger:
+                        self.logger.info(message)
+                    self.db.add_log(backup_id, 'INFO', message)
+                
                 self.logger.info("Uploading to Supabase Storage...")
                 self.update_progress(5, 'Enviando para Supabase Storage...', estimated_size_mb)
-                storage_file_id = storage_manager.upload_file(local_archive, archive_name)
+                storage_file_id = storage_manager.upload_file(
+                    local_archive, 
+                    archive_name,
+                    progress_callback=upload_progress_callback
+                )
                 self.logger.info(f"Upload completed. File: {storage_file_id}")
                 self.db.add_log(backup_id, 'INFO', f'Upload completed: {storage_file_id}')
             except Exception as e:

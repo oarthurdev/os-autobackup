@@ -22,13 +22,14 @@ class SupabaseStorageManager:
         except Exception as e:
             print(f"Erro ao verificar/criar bucket: {e}")
 
-    def upload_file(self, file_path: str, file_name: str = None) -> str:
+    def upload_file(self, file_path: str, file_name: str = None, progress_callback=None) -> str:
         """
-        Faz upload de um arquivo para o Supabase Storage
+        Faz upload de um arquivo para o Supabase Storage com progresso
         
         Args:
             file_path: Caminho do arquivo local
             file_name: Nome do arquivo no storage (se None, usa o nome original)
+            progress_callback: Função para reportar progresso (recebe mensagem)
             
         Returns:
             str: ID/caminho do arquivo no storage
@@ -45,14 +46,56 @@ class SupabaseStorageManager:
             content_type = "application/octet-stream"
 
         try:
-            with open(file_path, 'rb') as f:
-                file_data = f.read()
+            # Obter tamanho do arquivo
+            file_size = os.path.getsize(file_path)
+            
+            if progress_callback:
+                progress_callback(f"Iniciando upload de {file_size / (1024*1024):.2f} MB para Supabase Storage...")
+            
+            # Para arquivos pequenos (<50MB), usar método direto
+            if file_size < 50 * 1024 * 1024:
+                with open(file_path, 'rb') as f:
+                    file_data = f.read()
+                    
+                response = self.client.storage.from_(self.bucket_name).upload(
+                    file_name,
+                    file_data,
+                    file_options={"content-type": content_type}
+                )
                 
-            response = self.client.storage.from_(self.bucket_name).upload(
-                file_name,
-                file_data,
-                file_options={"content-type": content_type}
-            )
+                if progress_callback:
+                    progress_callback(f"Upload concluído: {file_name}")
+            else:
+                # Para arquivos maiores, ler em chunks e dar feedback
+                chunk_size = 10 * 1024 * 1024  # 10MB chunks
+                uploaded = 0
+                
+                # Ler o arquivo completo em chunks para dar feedback
+                file_data = bytearray()
+                with open(file_path, 'rb') as f:
+                    while True:
+                        chunk = f.read(chunk_size)
+                        if not chunk:
+                            break
+                        file_data.extend(chunk)
+                        uploaded += len(chunk)
+                        percentage = (uploaded / file_size) * 100
+                        
+                        if progress_callback:
+                            progress_callback(f"Lendo arquivo: {uploaded / (1024*1024):.2f} MB / {file_size / (1024*1024):.2f} MB ({percentage:.1f}%)")
+                
+                if progress_callback:
+                    progress_callback("Enviando para Supabase Storage...")
+                
+                # Fazer upload do arquivo completo
+                response = self.client.storage.from_(self.bucket_name).upload(
+                    file_name,
+                    bytes(file_data),
+                    file_options={"content-type": content_type}
+                )
+                
+                if progress_callback:
+                    progress_callback(f"Upload concluído: {file_name}")
             
             return file_name
         except Exception as e:
