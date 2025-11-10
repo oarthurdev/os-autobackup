@@ -212,8 +212,8 @@ class BackupEngine:
                 self.logger.info("Uploading to Supabase Storage...")
                 self.update_progress(5, 'Enviando para Supabase Storage...', estimated_size_mb)
                 
-                # Executar upload em chunks menores para não bloquear
-                storage_file_id = storage_manager.upload_file_chunked(
+                # Usar upload direto - mais simples e confiável
+                storage_file_id = storage_manager.upload_file(
                     local_archive, 
                     archive_name,
                     progress_callback=upload_progress_callback

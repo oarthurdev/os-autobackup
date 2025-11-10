@@ -52,50 +52,25 @@ class SupabaseStorageManager:
             if progress_callback:
                 progress_callback(f"Iniciando upload de {file_size / (1024*1024):.2f} MB para Supabase Storage...")
             
-            # Para arquivos pequenos (<50MB), usar método direto
-            if file_size < 50 * 1024 * 1024:
-                with open(file_path, 'rb') as f:
-                    file_data = f.read()
-                    
-                response = self.client.storage.from_(self.bucket_name).upload(
-                    file_name,
-                    file_data,
-                    file_options={"content-type": content_type}
-                )
-                
+            # Ler arquivo inteiro - Supabase SDK não suporta upload em chunks
+            # O upload acontece em memória mas é liberado após o envio
+            with open(file_path, 'rb') as f:
                 if progress_callback:
-                    progress_callback(f"Upload concluído: {file_name}")
-            else:
-                # Para arquivos maiores, ler em chunks e dar feedback
-                chunk_size = 10 * 1024 * 1024  # 10MB chunks
-                uploaded = 0
-                
-                # Ler o arquivo completo em chunks para dar feedback
-                file_data = bytearray()
-                with open(file_path, 'rb') as f:
-                    while True:
-                        chunk = f.read(chunk_size)
-                        if not chunk:
-                            break
-                        file_data.extend(chunk)
-                        uploaded += len(chunk)
-                        percentage = (uploaded / file_size) * 100
-                        
-                        if progress_callback:
-                            progress_callback(f"Lendo arquivo: {uploaded / (1024*1024):.2f} MB / {file_size / (1024*1024):.2f} MB ({percentage:.1f}%)")
-                
-                if progress_callback:
-                    progress_callback("Enviando para Supabase Storage...")
-                
-                # Fazer upload do arquivo completo
-                response = self.client.storage.from_(self.bucket_name).upload(
-                    file_name,
-                    bytes(file_data),
-                    file_options={"content-type": content_type}
-                )
-                
-                if progress_callback:
-                    progress_callback(f"Upload concluído: {file_name}")
+                    progress_callback("Lendo arquivo para upload...")
+                file_data = f.read()
+            
+            if progress_callback:
+                progress_callback(f"Enviando {file_size / (1024*1024):.2f} MB para Supabase Storage...")
+            
+            # Fazer upload
+            response = self.client.storage.from_(self.bucket_name).upload(
+                file_name,
+                file_data,
+                file_options={"content-type": content_type}
+            )
+            
+            if progress_callback:
+                progress_callback(f"Upload concluído: {file_name}")
             
             return file_name
         except Exception as e:
@@ -149,76 +124,6 @@ class SupabaseStorageManager:
         except Exception as e:
             print(f"Erro ao listar arquivos: {e}")
             return []
-
-    def upload_file_chunked(self, file_path: str, file_name: str = None, progress_callback=None) -> str:
-        """
-        Faz upload de um arquivo para o Supabase Storage em chunks com yield para liberar GIL
-        
-        Args:
-            file_path: Caminho do arquivo local
-            file_name: Nome do arquivo no storage (se None, usa o nome original)
-            progress_callback: Função para reportar progresso (recebe mensagem)
-            
-        Returns:
-            str: ID/caminho do arquivo no storage
-        """
-        import time
-        
-        if not file_name:
-            file_name = os.path.basename(file_path)
-
-        # Determine content type based on file extension
-        if file_name.endswith('.tar.gz') or file_name.endswith('.tgz'):
-            content_type = "application/gzip"
-        elif file_name.endswith('.zip'):
-            content_type = "application/zip"
-        else:
-            content_type = "application/octet-stream"
-
-        try:
-            # Obter tamanho do arquivo
-            file_size = os.path.getsize(file_path)
-            
-            if progress_callback:
-                progress_callback(f"Preparando upload de {file_size / (1024*1024):.2f} MB...")
-            
-            # Ler arquivo em chunks menores com yield para liberar GIL
-            chunk_size = 5 * 1024 * 1024  # 5MB chunks
-            uploaded = 0
-            
-            file_data = bytearray()
-            with open(file_path, 'rb') as f:
-                while True:
-                    chunk = f.read(chunk_size)
-                    if not chunk:
-                        break
-                    
-                    file_data.extend(chunk)
-                    uploaded += len(chunk)
-                    percentage = (uploaded / file_size) * 100
-                    
-                    if progress_callback:
-                        progress_callback(f"Lendo: {uploaded / (1024*1024):.2f} MB / {file_size / (1024*1024):.2f} MB ({percentage:.1f}%)")
-                    
-                    # Pequeno sleep para permitir que outras threads executem
-                    time.sleep(0.001)
-            
-            if progress_callback:
-                progress_callback("Enviando para Supabase Storage...")
-            
-            # Fazer upload do arquivo completo
-            response = self.client.storage.from_(self.bucket_name).upload(
-                file_name,
-                bytes(file_data),
-                file_options={"content-type": content_type}
-            )
-            
-            if progress_callback:
-                progress_callback(f"Upload concluído: {file_name}")
-            
-            return file_name
-        except Exception as e:
-            raise Exception(f"Erro ao fazer upload para Supabase Storage: {str(e)}")
 
     def download_file(self, file_name: str, local_path: str):
         """
