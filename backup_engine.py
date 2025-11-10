@@ -199,6 +199,9 @@ class BackupEngine:
             self.db.add_log(backup_id, 'INFO', 'Uploading to Supabase Storage')
 
             storage_manager = SupabaseStorageManager()
+            storage_file_id = None
+            upload_error = None
+            
             try:
                 def upload_progress_callback(message):
                     self.update_progress(5, f'Upload Supabase: {message}', estimated_size_mb)
@@ -208,11 +211,14 @@ class BackupEngine:
                 
                 self.logger.info("Uploading to Supabase Storage...")
                 self.update_progress(5, 'Enviando para Supabase Storage...', estimated_size_mb)
-                storage_file_id = storage_manager.upload_file(
+                
+                # Executar upload em chunks menores para não bloquear
+                storage_file_id = storage_manager.upload_file_chunked(
                     local_archive, 
                     archive_name,
                     progress_callback=upload_progress_callback
                 )
+                
                 self.logger.info(f"Upload completed. File: {storage_file_id}")
                 self.db.add_log(backup_id, 'INFO', f'Upload completed: {storage_file_id}')
             except Exception as e:
@@ -220,13 +226,14 @@ class BackupEngine:
                 self.logger.error(error_msg)
                 self.db.add_log(backup_id, 'ERROR', error_msg)
                 storage_file_id = None
+                upload_error = e
                 # Clean up remote file on upload failure
                 try:
                     self.logger.info("Cleaning up remote archive after upload failure")
                     ssh_manager.remove_remote_file(remote_archive)
                 except Exception as cleanup_error:
                     self.logger.warning(f"Failed to cleanup remote file: {cleanup_error}")
-                raise
+                raise upload_error
 
             # Upload successful - now clean up remote and local files
             self.update_progress(6, 'Limpando arquivos temporários...')
