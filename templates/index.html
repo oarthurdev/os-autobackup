@@ -203,29 +203,13 @@
                         </button>
                     </div>
                     <div class="section-body">
-                        <div class="modern-table-wrapper">
-                            <table class="modern-table">
-                                <thead>
-                                    <tr>
-                                        <th>Nome</th>
-                                        <th>Host</th>
-                                        <th>Porta</th>
-                                        <th>Usuário</th>
-                                        <th>Autenticação</th>
-                                        <th>Caminhos</th>
-                                        <th>Status</th>
-                                        <th class="actions-col">Ações</th>
-                                    </tr>
-                                </thead>
-                                <tbody id="sshHostsTable">
-                                    <tr>
-                                        <td colspan="8" class="empty-state">
-                                            <i class="fas fa-server"></i>
-                                            <p>Carregando servidores...</p>
-                                        </td>
-                                    </tr>
-                                </tbody>
-                            </table>
+                        <div class="tree-viewer-container">
+                            <div id="sshHostsTree" class="tree-viewer">
+                                <div class="tree-loading">
+                                    <div class="spinner"></div>
+                                    <p>Carregando servidores...</p>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>

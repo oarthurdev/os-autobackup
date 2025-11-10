@@ -540,54 +540,108 @@ async function loadSSHHosts() {
         const response = await fetch('/api/ssh-hosts');
         const hosts = await response.json();
 
-        const tbody = document.getElementById('sshHostsTable');
+        const treeContainer = document.getElementById('sshHostsTree');
 
         if (hosts.length === 0) {
-            tbody.innerHTML = `
-                <tr>
-                    <td colspan="8" class="text-center text-muted">
-                        Nenhum servidor cadastrado. Clique em "Adicionar Servidor" para começar.
-                    </td>
-                </tr>
+            treeContainer.innerHTML = `
+                <div class="tree-empty">
+                    <i class="fas fa-server"></i>
+                    <p>Nenhum servidor cadastrado</p>
+                    <p>Clique em "Adicionar Servidor" para começar</p>
+                </div>
             `;
             return;
         }
 
-        tbody.innerHTML = hosts.map(host => {
-            const statusBadge = host.connection_status?.startsWith('SUCCESS') 
-                ? '<span class="badge bg-success">Conectado</span>' 
+        treeContainer.innerHTML = hosts.map(host => {
+            const statusClass = host.connection_status?.startsWith('SUCCESS') 
+                ? 'status-connected' 
                 : host.connection_status?.startsWith('FAILED') 
-                ? '<span class="badge bg-danger">Falhou</span>' 
-                : '<span class="badge bg-secondary">Não testado</span>';
+                ? 'status-failed' 
+                : 'status-unknown';
+
+            const statusText = host.connection_status?.startsWith('SUCCESS') 
+                ? 'Conectado' 
+                : host.connection_status?.startsWith('FAILED') 
+                ? 'Falhou' 
+                : 'Não testado';
 
             const authType = host.auth_type === 'password' ? 'Senha' : 'Chave SSH';
+            const paths = host.backup_paths.split(',').map(p => p.trim()).filter(p => p);
 
             return `
-                <tr>
-                    <td><strong>${host.name}</strong></td>
-                    <td>${host.host}</td>
-                    <td>${host.port}</td>
-                    <td>${host.username}</td>
-                    <td>${authType}</td>
-                    <td><small>${host.backup_paths}</small></td>
-                    <td>${statusBadge}</td>
-                    <td>
-                        <button class="btn btn-sm btn-primary" onclick="testConnection(${host.id})" title="Testar Conexão">
-                            <i class="fas fa-plug"></i>
-                        </button>
-                        <button class="btn btn-sm btn-warning" onclick="showEditHostModal(${host.id})" title="Editar">
-                            <i class="fas fa-edit"></i>
-                        </button>
-                        <button class="btn btn-sm btn-danger" onclick="deleteHost(${host.id})" title="Excluir">
-                            <i class="fas fa-trash"></i>
-                        </button>
-                    </td>
-                </tr>
+                <div class="tree-node">
+                    <div class="tree-node-item">
+                        <div class="tree-node-content" onclick="toggleTreeNode(this)">
+                            <i class="fas fa-chevron-down tree-node-icon"></i>
+                            <div class="tree-node-info">
+                                <div class="tree-node-title">
+                                    <i class="fas fa-server"></i>
+                                    ${host.name}
+                                </div>
+                                <div class="tree-node-subtitle">
+                                    ${host.username}@${host.host}:${host.port} • ${authType}
+                                </div>
+                            </div>
+                            <span class="tree-node-status ${statusClass}">${statusText}</span>
+                            <div class="tree-node-actions" onclick="event.stopPropagation()">
+                                <button class="btn-test" onclick="testConnection(${host.id})" title="Testar Conexão">
+                                    <i class="fas fa-plug"></i> Testar
+                                </button>
+                                <button class="btn-edit" onclick="showEditHostModal(${host.id})" title="Editar">
+                                    <i class="fas fa-edit"></i> Editar
+                                </button>
+                                <button class="btn-delete" onclick="deleteHost(${host.id})" title="Excluir">
+                                    <i class="fas fa-trash"></i> Excluir
+                                </button>
+                            </div>
+                        </div>
+                        <div class="tree-node-children">
+                            <div class="tree-child-item">
+                                <i class="fas fa-info-circle"></i>
+                                <strong>Detalhes de Conexão</strong>
+                            </div>
+                            <div class="tree-child-item">
+                                <i class="fas fa-globe"></i>
+                                Host: ${host.host}
+                            </div>
+                            <div class="tree-child-item">
+                                <i class="fas fa-ethernet"></i>
+                                Porta: ${host.port}
+                            </div>
+                            <div class="tree-child-item">
+                                <i class="fas fa-user"></i>
+                                Usuário: ${host.username}
+                            </div>
+                            <div class="tree-child-item">
+                                <i class="fas fa-key"></i>
+                                Autenticação: ${authType}
+                            </div>
+                            ${paths.length > 0 ? `
+                                <div class="tree-child-item">
+                                    <i class="fas fa-folder"></i>
+                                    <strong>Caminhos de Backup (${paths.length})</strong>
+                                </div>
+                                ${paths.map(path => `
+                                    <div class="tree-child-item" style="padding-left: 36px">
+                                        <i class="fas fa-folder-open"></i>
+                                        ${path}
+                                    </div>
+                                `).join('')}
+                            ` : ''}
+                        </div>
+                    </div>
+                </div>
             `;
         }).join('');
     } catch (error) {
         console.error('Error loading SSH hosts:', error);
     }
+}
+
+function toggleTreeNode(element) {
+    const nodeItem = element.closest('.tree-node-item');
+    nodeItem.classList.toggle('tree-node-collapsed');
 }
 
 function showAddHostModal() {
