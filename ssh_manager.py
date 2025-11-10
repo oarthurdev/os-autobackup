@@ -26,24 +26,36 @@ class SSHManager:
 
             self.client.set_missing_host_key_policy(paramiko.RejectPolicy())
 
+            # Connection parameters with keep-alive to prevent session timeout
+            connect_params = {
+                'hostname': self.host,
+                'port': self.port,
+                'username': self.username,
+                'timeout': 30,
+                'banner_timeout': 60,
+                'auth_timeout': 60,
+                'allow_agent': False,
+                'look_for_keys': False
+            }
+
             if self.key_path and os.path.exists(self.key_path):
-                self.client.connect(
-                    hostname=self.host,
-                    port=self.port,
-                    username=self.username,
-                    key_filename=self.key_path,
-                    timeout=30
-                )
+                connect_params['key_filename'] = self.key_path
             elif self.password:
-                self.client.connect(
-                    hostname=self.host,
-                    port=self.port,
-                    username=self.username,
-                    password=self.password,
-                    timeout=30
-                )
+                connect_params['password'] = self.password
             else:
                 raise Exception("No authentication method provided (password or key)")
+
+            self.client.connect(**connect_params)
+            
+            # Configure keep-alive to prevent connection timeout during long operations
+            # Send keep-alive packets every 30 seconds
+            transport = self.client.get_transport()
+            if transport:
+                transport.set_keepalive(30)  # Send keep-alive every 30 seconds
+                # Disable timeout on the transport channel for long-running operations
+                channel = transport.open_session()
+                channel.settimeout(None)  # No timeout for the channel
+                channel.close()
 
             return True
         except Exception as e:
@@ -66,11 +78,17 @@ class SSHManager:
             self.client.close()
             self.client = None
 
-    def execute_command(self, command: str) -> tuple:
+    def execute_command(self, command: str, timeout: int = None) -> tuple:
         if not self.client:
             raise Exception("Not connected to SSH server")
 
-        stdin, stdout, stderr = self.client.exec_command(command)
+        stdin, stdout, stderr = self.client.exec_command(command, timeout=timeout)
+        
+        # Keep the channel alive during long operations
+        channel = stdout.channel
+        if channel:
+            channel.settimeout(None)  # No timeout for long-running commands
+        
         exit_status = stdout.channel.recv_exit_status()
 
         return stdout.read().decode('utf-8'), stderr.read().decode('utf-8'), exit_status
@@ -91,7 +109,7 @@ class SSHManager:
             paths_str = ' '.join([f'"{p}"' for p in paths])
             command = f'du -sb {exclude_str} {paths_str} 2>/dev/null | awk \'{{sum+=$1}} END {{print sum}}\''
 
-            stdin, stdout, stderr = self.client.exec_command(command, timeout=60)
+            stdin, stdout, stderr = self.client.exec_command(command, timeout=None)
             output = stdout.read().decode().strip()
 
             return int(output) if output and output.isdigit() else 0
@@ -186,7 +204,8 @@ class SSHManager:
         if progress_callback and total_size >= 1073741824:
             progress_callback(f"Tamanho estimado: {total_size / (1024*1024):.2f} MB - usando {compression_info}")
 
-        stdout, stderr, exit_status = self.execute_command(zip_command)
+        # Execute compression command without timeout (can take hours for large backups)
+        stdout, stderr, exit_status = self.execute_command(zip_command, timeout=None)
 
         if exit_status != 0 and "nothing to do" not in stderr.lower():
             if "No such file or directory" in stderr:
@@ -322,11 +341,15 @@ class SSHManager:
             if progress_callback:
                 progress_callback(f"Iniciando download de {self._format_bytes(file_size)} (chunks de {chunk_size // (1024*1024)}MB)")
 
-            # Enable prefetching for better performance on large files
+            # Configure channel for long-running transfers without timeout
             if hasattr(sftp, 'get_channel'):
                 channel = sftp.get_channel()
                 if hasattr(channel, 'settimeout'):
-                    channel.settimeout(300)  # 5 minute timeout for large files
+                    channel.settimeout(None)  # No timeout for large file transfers
+                # Keep connection alive during transfer
+                transport = channel.get_transport()
+                if transport:
+                    transport.set_keepalive(30)
             
             # Open remote file for reading
             with sftp.open(remote_path, 'rb') as remote_file:
