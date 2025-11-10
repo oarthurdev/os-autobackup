@@ -806,11 +806,6 @@ async function loadBackups() {
                                 <i class="fas fa-download"></i> Download
                             </a>
                         ` : ''}
-                        ${backup.status === 'SUCCESS' && backup.drive_file_id ? `
-                            <button class="btn btn-sm btn-warning" onclick="restoreBackup(${backup.id}, event)" title="Restaurar (Descriptografar)">
-                                <i class="fas fa-unlock"></i> Restaurar
-                            </button>
-                        ` : ''}
                     </td>
                 </tr>
             `;
