@@ -13,3 +13,11 @@ paramiko
 python-dotenv
 supabase
 tabulate
+APScheduler
+click
+cryptography
+Flask
+paramiko
+python-dotenv
+supabase
+tabulate
